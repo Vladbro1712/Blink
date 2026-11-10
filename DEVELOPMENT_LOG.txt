@@ -1,0 +1,46 @@
+BLINK DEVELOPMENT LOG
+======================
+
+Project
+-------
+Blink is a customizable music player planned for Windows, Android, iPhone, and the Web. Its initial design follows the warm neutral palette supplied with the brief.
+
+Completed
+---------
+- Created a React, TypeScript, and Vite application in C:\Code\Blink.
+- Added Russian-language home, favorites, and settings screens with responsive desktop and mobile layouts.
+- Added the initial Spotify, VK Music, and Yandex Music platform picker and connection status labels.
+- Added saved platform selection and the remember-selection setting.
+- Added track search, favorite toggles, player controls, track navigation, and volume control, using clearly labeled sample/demo tracks.
+- Added palette customization controls and an alternate neutral theme.
+- Created six local generated raster cover images so the app does not rely on image hosting.
+- Added Electron desktop app configuration and built the Windows NSIS installer.
+- Added Capacitor dependencies and a Capacitor configuration for a future Android shell.
+- Created the user guide and development log.
+
+Verification
+------------
+- npm run build: passed.
+- npm run lint: passed.
+- npm run desktop:build: passed. Installer: release\Blink Setup 0.1.0.exe.
+- Browser check: interface rendered, but preview initially showed connection errors for externally hosted Unsplash images. These images were replaced with local covers and the app was rebuilt. The final local-image browser state was not rechecked after this change.
+
+Important limitations
+---------------------
+- No real Spotify, VK Music, or Yandex Music account sign-in or music stream has been implemented. Provider selection and track playback are UI demonstrations, not connected service features.
+- A provider OAuth app and secure auth flow are required before real accounts can connect. Spotify developer credentials and a registered redirect URI will be needed. Confirm the available VK and Yandex APIs and their terms before promising playback.
+- The volume control and track navigation update demo UI state; no audio files or actual playback engine are included.
+- The theme switch currently selects an alternate neutral palette, not a complete theme editor.
+- Capacitor packages are installed; no Android/iOS project has been generated or built. iOS builds require macOS and Apple tooling.
+- Git was not found on PATH in this environment, so no repository or commit checkpoint exists. Git and GitHub setup remain outstanding. Keep this log updated before significant changes until Git is installed.
+- Windows installer was built unsigned; Windows may show an unknown-publisher warning.
+- Google Fonts are requested remotely; if unavailable, system sans-serif fallbacks are used.
+
+Next steps
+----------
+1. Install Git, initialize a repository, create a first commit, and publish to GitHub.
+2. Choose the first music provider and configure its developer app and secure OAuth redirect flow.
+3. Check current VK Music and Yandex Music API, playback, and application distribution rules.
+4. Implement genuine auth, catalog, and compliant playback for the selected service.
+5. Test the installer on Windows; generate a Capacitor Android project and test on Android hardware/emulator.
+6. Assess iOS after a Mac and Apple developer toolchain are available.
