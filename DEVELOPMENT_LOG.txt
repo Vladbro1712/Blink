@@ -20,12 +20,15 @@ Completed
 - Added local audio file import, a persistent IndexedDB library, a dedicated All Tracks screen, and favorites keyed by file.
 - Connected play/pause, track navigation, seeking, duration display, volume, and end-of-track navigation to actual local audio playback.
 - Fixed malformed JSX in the working tree that was preventing the app from compiling.
+- Fixed the blank Electron window by configuring Vite to emit relative asset URLs for file:// packaged builds.
+- Added the dedicated All Tracks screen for the imported local audio library.
 
 Verification
 ------------
-- npm run build: passed after the local audio library and JSX repair.
+- npm run build: passed after the local audio library and Electron asset-path fix.
 - npm run lint: passed.
-- npm run desktop:build: passed; refreshed release\\Blink Setup 0.1.0.exe.
+- npm run desktop:build: passed; refreshed release\\Blink Setup 0.1.0.exe with relative asset URLs.
+- Started the freshly packaged unpacked Electron app. Desktop screenshot verification was unavailable because desktop control was owned by the user.
 - Browser preview loaded the home screen with no JavaScript console errors.
 - Browser interaction automation returned an internal tool error, so audio import/playback was not fully verified end to end.
 
