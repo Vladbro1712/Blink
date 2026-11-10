@@ -21,9 +21,11 @@ Completed
 - Connected play/pause, track navigation, seeking, duration display, volume, and end-of-track navigation to actual local audio playback.
 - Fixed malformed JSX in the working tree that was preventing the app from compiling.
 - Fixed the blank Electron window by configuring Vite to emit relative asset URLs for file:// packaged builds.
-- Added the dedicated All Tracks screen for the imported local audio library.
+- Kept the remember-selection checkbox in the platform picker; removed duplicate remember-selection and theme controls from Settings as requested.
+- Removed the unused alternate theme control and palette swatches from Settings.
+- Fixed cover asset URLs so images load in packaged Electron builds using file://.
+- Corrected provider labels: Spotify is shown as not connected until real OAuth is implemented; other unimplemented providers are marked as coming later.
 
-Verification
 ------------
 - npm run build: passed after the local audio library and Electron asset-path fix.
 - npm run lint: passed.
