@@ -28,7 +28,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "concurrently": "^10.0.7",
-    "electron": "^45.2.3",
+    "electron": "github:castlabs/electron-releases#v45.2.1+wvcus",
     "electron-builder": "^26.18.0",
     "oxlint": "^1.90.0",
     "typescript": "~7.0.2",
@@ -39,6 +39,9 @@
     "appId": "app.blink.music",
     "productName": "Blink",
     "directories": { "output": "release" },
+    "electronDownload": { "mirror": "https://github.com/castlabs/electron-releases/releases/download/" },
+    "disableAsarIntegrity": true,
+    "afterPack": "electron/after-pack.cjs",
     "files": ["dist/**/*", "electron/**/*", "node_modules/electron-store/**/*", "node_modules/conf/**/*", "node_modules/ajv/**/*", "node_modules/json-schema-typed/**/*"],
     "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
     "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }

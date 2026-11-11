@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, components, ipcMain, safeStorage, shell } from 'electron'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import Store from 'electron-store'
@@ -139,8 +139,14 @@ ipcMain.handle('spotify-api', async (_event, args) => {
 })
 ipcMain.handle('spotify-disconnect', () => { store.delete('spotify-tokens') })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   void store
+  try {
+    await components.whenReady()
+    console.log('Widevine components ready', components.status())
+  } catch (error) {
+    console.error('Widevine components failed', error)
+  }
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
