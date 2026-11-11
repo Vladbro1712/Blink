@@ -26,7 +26,7 @@ Completed
 - Fixed cover asset URLs so images load in packaged Electron builds using file://.
 - Added Spotify Authorization Code with PKCE for the closed beta. The public Client ID is used by the renderer; no Client Secret is stored or requested.
 - Added an Electron-only loopback callback at http://127.0.0.1:43821/callback, state validation, encrypted token storage through Windows safeStorage, token refresh, and disconnect handling.
-- Updated Spotify search to use the February 2026 Development Mode maximum of 10 results per request; the previous limit of 12 caused the search error shown during beta testing.
+- Updated Spotify search to use the February 2026 Development Mode maximum of 10 results per request and an explicit RU market. The market is required when the user country is not available in the current `/me` response; the previous request could fail even with the corrected limit.
 
 Verification
 ------------

@@ -19,6 +19,7 @@ const photo = (id: string) => `${import.meta.env.BASE_URL}covers/${id}.jpg`
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`
 const spotifyClientId = '1720e78833f940348f746d417be3b00c'
 const spotifyRedirectUri = 'http://127.0.0.1:43821/callback'
+const spotifyMarket = 'RU'
 const createRandomString = (length: number) => {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'
   const values = crypto.getRandomValues(new Uint8Array(length))
@@ -65,7 +66,7 @@ function App() {
   useEffect(() => { void window.blink?.spotify.status().then(async connected => { setSpotifyConnected(connected); if (connected) { try { setSpotifyProfile(await window.blink?.spotify.api('/me') as SpotifyProfile) } catch { setSpotifyConnected(false) } } }) }, [])
   useEffect(() => { if (!window.blink) setSpotifyConnected(false) }, [])
   useEffect(() => { if (!audioRef.current) return; if (playing) void audioRef.current.play().catch(() => setPlaying(false)); else audioRef.current.pause() }, [current, playing])
-  useEffect(() => { if (!query.trim() || !spotifyConnected || !window.blink || chosen !== 'Spotify') { setSpotifyTracks([]); setSpotifyError(''); return } setSpotifyError(''); const timer = window.setTimeout(() => { void window.blink?.spotify.api(`/search?${new URLSearchParams({ q: query, type: 'track', limit: '10' })}`).then(response => { const data = response as SpotifySearchResponse; setSpotifyTracks((data.tracks?.items || []).map(item => ({ title: item.name, artist: item.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(item.duration_ms / 1000), image: item.album.images[0]?.url, externalUrl: item.external_urls.spotify, fileId: `spotify-${item.id}` }))) }).catch(error => { console.error(error); setSpotifyError('Не удалось выполнить поиск Spotify') }) }, 350); return () => window.clearTimeout(timer) }, [chosen, query, spotifyConnected])
+  useEffect(() => { if (!query.trim() || !spotifyConnected || !window.blink || chosen !== 'Spotify') { setSpotifyTracks([]); setSpotifyError(''); return } setSpotifyError(''); const timer = window.setTimeout(() => { void window.blink?.spotify.api(`/search?${new URLSearchParams({ q: query, type: 'track', limit: '10', market: spotifyMarket })}`).then(response => { const data = response as SpotifySearchResponse; setSpotifyTracks((data.tracks?.items || []).map(item => ({ title: item.name, artist: item.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(item.duration_ms / 1000), image: item.album.images[0]?.url, externalUrl: item.external_urls.spotify, fileId: `spotify-${item.id}` }))) }).catch(error => { console.error(error); const detail = error instanceof Error ? error.message.replace(/^Error: /, '') : String(error); setSpotifyError(`Не удалось выполнить поиск Spotify: ${detail}`) }) }, 350); return () => window.clearTimeout(timer) }, [chosen, query, spotifyConnected])
   const pickPlatform = (platform: Platform) => { setChosen(platform); if (remember) { localStorage.setItem('blink-platform', platform); setShowPicker(false) } }
   const connectSpotify = async () => {
     if (!window.blink || spotifyBusy) return
