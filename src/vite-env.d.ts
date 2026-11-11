@@ -21,6 +21,7 @@ interface SpotifyPlayer {
 declare global {
   interface Window {
     Spotify?: { Player: new (options: { name: string; getOAuthToken: (callback: (token: string) => void) => void; volume?: number; enableMediaSession?: boolean }) => SpotifyPlayer }
+    onSpotifyWebPlaybackSDKReady?: () => void
     blink?: {
       platform: string
       spotify: SpotifyBridge

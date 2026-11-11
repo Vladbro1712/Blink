@@ -28,6 +28,7 @@ Completed
 - Added an Electron-only loopback callback at http://127.0.0.1:43821/callback, state validation, encrypted token storage through Windows safeStorage, token refresh, and disconnect handling.
 - Added an initial Spotify Web Playback SDK integration: Blink loads the official SDK, exposes a refreshed PKCE access token to it through the protected Electron bridge, registers a `Blink` Spotify Connect device, transfers playback to that device, and controls play/pause, seek, and volume. Local audio playback remains on the native HTML audio element.
 - Spotify Web Playback SDK requires a Spotify Premium account and a fresh authorization after adding `streaming` and `user-modify-playback-state` scopes.
+- Web Playback SDK playback in Electron depends on Chromium's encrypted media/Widevine support; Blink now surfaces SDK initialization and account/authentication errors instead of silently opening an external Spotify link.
 - Updated Spotify search to use the February 2026 Development Mode maximum of 10 results per request and an explicit RU market. The market is required when the user country is not available in the current `/me` response; the previous request could fail even with the corrected limit.
 
 Verification
