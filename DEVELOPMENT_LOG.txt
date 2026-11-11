@@ -26,6 +26,7 @@ Completed
 - Fixed cover asset URLs so images load in packaged Electron builds using file://.
 - Added Spotify Authorization Code with PKCE for the closed beta. The public Client ID is used by the renderer; no Client Secret is stored or requested.
 - Added an Electron-only loopback callback at http://127.0.0.1:43821/callback, state validation, encrypted token storage through Windows safeStorage, token refresh, and disconnect handling.
+- Added Spotify profile loading through `/v1/me`, catalog track search through `/v1/search`, album artwork and external Spotify links. Local audio files continue to play inside Blink.
 - Updated Spotify search to use the February 2026 Development Mode maximum of 10 results per request and an explicit RU market. The market is required when the user country is not available in the current `/me` response; the previous request could fail even with the corrected limit.
 
 Verification
@@ -33,14 +34,15 @@ Verification
 - npm run build: passed after the Spotify PKCE integration.
 - npm run lint: passed with one existing React set-state-in-effect warning; no lint errors remain.
 - npm run desktop:build: passed; refreshed release\\Blink Setup 0.1.0.exe.
-- Started the freshly packaged unpacked Electron app and confirmed the process launches. Full OAuth completion still requires an interactive Spotify account authorization in the browser.
+- On the installed Windows build, Spotify OAuth restored the profile `Vladbro1712`, a search for `dabbakwood` returned catalog cards with artwork, and opening a result launched the matching track in the official Spotify client.
+- Started the freshly packaged Windows build, completed Spotify OAuth for the allowlisted account, loaded the profile, searched the Spotify catalog, and opened a result in the official Spotify client.
 - Spotify Developer app created in Development mode with Web API and redirect URI http://127.0.0.1:43821/callback. Development mode is limited to the owner and up to five allowlisted users.
 
 Important limitations
 ---------------------
-- No real Spotify, VK Music, or Yandex Music account sign-in or music stream has been implemented. Provider selection and track playback are UI demonstrations, not connected service features.
+- No Spotify streaming inside Blink is implemented yet; Spotify catalog results open in the official Spotify client. Local audio files play inside Blink.
 - A provider OAuth app and secure auth flow are required before real accounts can connect. Spotify developer credentials and a registered redirect URI will be needed. Confirm the available VK and Yandex APIs and their terms before promising playback.
-- The volume control and track navigation update demo UI state; no audio files or actual playback engine are included.
+- The local audio library and player support real imported audio files, including playback, pause, seeking, navigation, and volume control.
 - The theme switch currently selects an alternate neutral palette, not a complete theme editor.
 - Capacitor packages are installed; no Android/iOS project has been generated or built. iOS builds require macOS and Apple tooling.
 - Git was not found on PATH in this environment, so no repository or commit checkpoint exists. Git and GitHub setup remain outstanding. Keep this log updated before significant changes until Git is installed.
@@ -49,9 +51,6 @@ Important limitations
 
 Next steps
 ----------
-1. Install Git, initialize a repository, create a first commit, and publish to GitHub.
-2. Choose the first music provider and configure its developer app and secure OAuth redirect flow.
-3. Check current VK Music and Yandex Music API, playback, and application distribution rules.
-4. Add genuine auth, catalog, and compliant playback for the selected service.
-5. Test local-file import and playback in the installed application; generate a Capacitor Android project and test on Android hardware/emulator.
-6. Assess iOS after a Mac and Apple developer toolchain are available.
+1. Continue Spotify playback integration only if the product requirements justify adding Web Playback SDK and its playback constraints.
+2. Check current VK Music and Yandex Music API, playback, and application distribution rules.
+3. Generate and test the Capacitor Android project. iOS builds require macOS and Apple tooling.
