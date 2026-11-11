@@ -26,7 +26,8 @@ Completed
 - Fixed cover asset URLs so images load in packaged Electron builds using file://.
 - Added Spotify Authorization Code with PKCE for the closed beta. The public Client ID is used by the renderer; no Client Secret is stored or requested.
 - Added an Electron-only loopback callback at http://127.0.0.1:43821/callback, state validation, encrypted token storage through Windows safeStorage, token refresh, and disconnect handling.
-- Added Spotify profile loading through `/v1/me`, catalog track search through `/v1/search`, album artwork and external Spotify links. Local audio files continue to play inside Blink.
+- Added an initial Spotify Web Playback SDK integration: Blink loads the official SDK, exposes a refreshed PKCE access token to it through the protected Electron bridge, registers a `Blink` Spotify Connect device, transfers playback to that device, and controls play/pause, seek, and volume. Local audio playback remains on the native HTML audio element.
+- Spotify Web Playback SDK requires a Spotify Premium account and a fresh authorization after adding `streaming` and `user-modify-playback-state` scopes.
 - Updated Spotify search to use the February 2026 Development Mode maximum of 10 results per request and an explicit RU market. The market is required when the user country is not available in the current `/me` response; the previous request could fail even with the corrected limit.
 
 Verification

@@ -17,9 +17,9 @@ Blink — проект музыкального проигрывателя дл�
 - По просьбе пользователя из настроек удалены повторное запоминание площадки и пока не нужные настройки темы; запоминание осталось в меню выбора площадки.
 - Исправлены пути локальных обложек в Windows-сборке.
 - Поиск Spotify ограничен десятью результатами в одном запросе согласно новым ограничениям Development Mode и получает явный рынок `RU`; это нужно, когда страна пользователя не возвращается в `/v1/me`.
-- В Windows-версии проверено подключение аккаунта `Vladbro1712`, поиск `dabbakwood` с обложками и открытие выбранного трека в официальном Spotify.
+- Added Spotify Web Playback SDK playback for active Spotify Premium accounts, including the `streaming` and `user-modify-playback-state` permissions, play/pause, seeking, and volume control. After installing this version, disconnect Spotify in Blink and authorize again to grant the new permissions.
 
-- **Важно:** Spotify подключается только в Windows/Electron-сборке через OAuth PKCE. В меню площадок выберите Spotify и нажмите «Подключить Spotify», затем завершите вход в официальном окне Spotify. Client Secret не нужен и не должен передаваться в переписку или GitHub. Сейчас приложение находится в Spotify Development Mode: для закрытой беты нужно добавить аккаунты тестировщиков в User Management, максимум до пяти пользователей. Каталог Spotify ищется в Blink, а выбранный трек открывается в официальном Spotify. VK Музыка и Яндекс Музыка пока не подключены.
+**Важно:** Spotify подключается только в Windows/Electron-сборке через OAuth PKCE. В меню площадок выберите Spotify и нажмите «Подключить Spotify», затем завершите вход в официальном окне Spotify. Client Secret не нужен и не должен передаваться в переписку или GitHub. Сейчас приложение находится в Spotify Development Mode: для закрытой беты нужно добавить аккаунты тестировщиков в User Management, максимум до пяти пользователей. Для воспроизведения Spotify внутри Blink нужен активный Premium и повторное подключение аккаунта после обновления разрешений. VK Музыка и Яндекс Музыка пока не подключены.
 
 ## Как запустить в браузере
 

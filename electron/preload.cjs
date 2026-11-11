@@ -5,7 +5,8 @@ contextBridge.exposeInMainWorld('blink', {
   spotify: {
     status: () => ipcRenderer.invoke('spotify-status'),
     authenticate: (args) => ipcRenderer.invoke('spotify-auth-start', args),
-    api: (path) => ipcRenderer.invoke('spotify-api', { path }),
+    token: () => ipcRenderer.invoke('spotify-token'),
+    api: (path, options) => ipcRenderer.invoke('spotify-api', { path, ...options }),
     disconnect: () => ipcRenderer.invoke('spotify-disconnect'),
   },
 })

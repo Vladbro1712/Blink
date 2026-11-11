@@ -110,16 +110,31 @@ function createWindow() {
 
 ipcMain.handle('spotify-status', () => Boolean(readTokens()))
 ipcMain.handle('spotify-auth-start', (_event, args) => waitForSpotifyCallback(args.authUrl, args.codeVerifier, args.state))
+ipcMain.handle('spotify-token', async () => {
+  const stored = readTokens()
+  if (!stored) throw new Error('Spotify is not connected')
+  const tokens = await refreshSpotifyToken(stored)
+  return tokens.access_token
+})
 ipcMain.handle('spotify-api', async (_event, args) => {
   const stored = readTokens()
   if (!stored) throw new Error('Spotify is not connected')
   const tokens = await refreshSpotifyToken(stored)
-  const response = await fetch(`https://api.spotify.com/v1${args.path}`, { headers: { Authorization: `Bearer ${tokens.access_token}` } })
+  const method = args.method || 'GET'
+  const response = await fetch(`https://api.spotify.com/v1${args.path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${tokens.access_token}`,
+      ...(args.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(args.body ? { body: JSON.stringify(args.body) } : {}),
+  })
   if (!response.ok) {
     let detail = ''
     try { detail = await response.text() } catch { /* response body is optional */ }
     throw new Error(`Spotify API request failed (${response.status})${detail ? `: ${detail}` : ''}`)
   }
+  if (response.status === 204) return null
   return response.json()
 })
 ipcMain.handle('spotify-disconnect', () => { store.delete('spotify-tokens') })
