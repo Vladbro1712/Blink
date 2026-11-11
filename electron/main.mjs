@@ -115,7 +115,11 @@ ipcMain.handle('spotify-api', async (_event, args) => {
   if (!stored) throw new Error('Spotify is not connected')
   const tokens = await refreshSpotifyToken(stored)
   const response = await fetch(`https://api.spotify.com/v1${args.path}`, { headers: { Authorization: `Bearer ${tokens.access_token}` } })
-  if (!response.ok) throw new Error(`Spotify API request failed (${response.status})`)
+  if (!response.ok) {
+    let detail = ''
+    try { detail = await response.text() } catch { /* response body is optional */ }
+    throw new Error(`Spotify API request failed (${response.status})${detail ? `: ${detail}` : ''}`)
+  }
   return response.json()
 })
 ipcMain.handle('spotify-disconnect', () => { store.delete('spotify-tokens') })
