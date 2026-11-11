@@ -15,6 +15,17 @@ const tracks: Track[] = [
 ]
 const photo = (id: string) => `${import.meta.env.BASE_URL}covers/${id}.jpg`
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`
+const spotifyClientId = '1720e78833f940348f746d417be3b00c'
+const spotifyRedirectUri = 'http://127.0.0.1:43821/callback'
+const createRandomString = (length: number) => {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'
+  const values = crypto.getRandomValues(new Uint8Array(length))
+  return Array.from(values, value => alphabet[value % alphabet.length]).join('')
+}
+const createCodeChallenge = async (verifier: string) => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 const openLibrary = () => new Promise<IDBDatabase>((resolve, reject) => {
   const request = indexedDB.open('blink-audio-library', 1)
   request.onupgradeneeded = () => request.result.createObjectStore('audio', { keyPath: 'id' })
@@ -35,6 +46,8 @@ function App() {
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(70)
+  const [spotifyConnected, setSpotifyConnected] = useState(false)
+  const [spotifyBusy, setSpotifyBusy] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const allTracks = useMemo(() => [...tracks, ...localTracks], [localTracks])
@@ -44,8 +57,41 @@ function App() {
   useEffect(() => { localStorage.setItem('blink-favorites', JSON.stringify(favoriteIds)) }, [favoriteIds])
   useEffect(() => { void openLibrary().then(db => { const request = db.transaction('audio').objectStore('audio').getAll(); request.onsuccess = () => setLocalTracks((request.result as Array<Track & { blob: Blob }>).map(({ blob, ...track }) => ({ ...track, src: URL.createObjectURL(blob) }))) }) }, [])
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100 }, [volume])
+  useEffect(() => { void window.blink?.spotify.status().then(setSpotifyConnected) }, [])
+  useEffect(() => { if (!window.blink) setSpotifyConnected(false) }, [])
   useEffect(() => { if (!audioRef.current) return; if (playing) void audioRef.current.play().catch(() => setPlaying(false)); else audioRef.current.pause() }, [current, playing])
   const pickPlatform = (platform: Platform) => { setChosen(platform); if (remember) { localStorage.setItem('blink-platform', platform); setShowPicker(false) } }
+  const connectSpotify = async () => {
+    if (!window.blink || spotifyBusy) return
+    setSpotifyBusy(true)
+    try {
+      const codeVerifier = createRandomString(64)
+      const state = createRandomString(32)
+      const codeChallenge = await createCodeChallenge(codeVerifier)
+      const authUrl = new URL('https://accounts.spotify.com/authorize')
+      authUrl.search = new URLSearchParams({
+        client_id: spotifyClientId,
+        response_type: 'code',
+        redirect_uri: spotifyRedirectUri,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge,
+        state,
+        scope: 'user-read-private user-read-email user-read-currently-playing user-read-playback-state',
+      }).toString()
+      await window.blink.spotify.authenticate({ authUrl: authUrl.toString(), codeVerifier, state })
+      setSpotifyConnected(true)
+      setChosen('Spotify')
+      setShowPicker(false)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setSpotifyBusy(false)
+    }
+  }
+  const disconnectSpotify = async () => {
+    await window.blink?.spotify.disconnect()
+    setSpotifyConnected(false)
+  }
   const toggleFavorite = (title: string) => setFavoriteIds(items => items.includes(title) ? items.filter(i => i !== title) : [...items, title])
   const playTrack = (track: Track) => { setCurrent(track); setPlaying(Boolean(track.src)); setPosition(0) }
   const importFiles = (files: FileList | null) => {
@@ -100,7 +146,7 @@ function App() {
       <footer className="footer"><span>BLINK <span className="footer-dot">●</span> ВАША МУЗЫКА, ВАШИ ПРАВИЛА</span><span>СДЕЛАНО ДЛЯ МУЗЫКИ <Music2 size={12}/></span></footer>
     </section>
     <footer className="player"><audio ref={audioRef} src={current.src} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onLoadedMetadata={event => { const seconds = event.currentTarget.duration; if (Number.isFinite(seconds)) { setDuration(seconds); setCurrent(track => track.src === current.src ? { ...track, duration: formatTime(seconds) } : track) } }} onEnded={() => stepTrack(1)}/><div className="player-track"><img src={photo(current.cover)} alt=""/><div><strong>{current.title}</strong><span>{current.artist}</span></div><button className={favoriteIds.includes(current.fileId || current.title)?'player-heart liked':'player-heart'} onClick={() => toggleFavorite(current.fileId || current.title)} aria-label="В любимые"><Heart size={16} fill={favoriteIds.includes(current.title)?'currentColor':'none'}/></button></div><div className="player-controls"><div className="control-buttons"><button aria-label="Предыдущий трек" onClick={() => stepTrack(-1)}><SkipBack size={17} fill="currentColor"/></button><button className="main-play" aria-label={playing?'Пауза':'Играть'} onClick={() => current.src ? setPlaying(!playing) : fileInputRef.current?.click()}>{playing?<Pause size={17} fill="currentColor"/>:<Play size={17} fill="currentColor"/>}</button><button aria-label="Следующий трек" onClick={() => stepTrack(1)}><SkipForward size={17} fill="currentColor"/></button></div><div className="timeline"><span>{formatTime(position)}</span><input className="seek-slider" type="range" min="0" max={duration} step="0.1" value={position} onChange={event => { const time = Number(event.target.value); setPosition(time); if (audioRef.current) audioRef.current.currentTime = time }} aria-label="Позиция воспроизведения"/><span>{current.duration}</span></div></div><div className="player-volume"><Volume2 size={16}/><input type="range" min="0" max="100" value={volume} onChange={e => setVolume(Number(e.target.value))} aria-label="Громкость"/></div></footer>
-    {showPicker && <div className="modal-backdrop" onClick={() => setShowPicker(false)}><section className="source-modal" onClick={e => e.stopPropagation()}><div className="modal-top"><span className="eyebrow">ВАША МУЗЫКА, В ОДНОМ МЕСТЕ</span><button className="modal-close" onClick={() => setShowPicker(false)} aria-label="Закрыть"><X size={19}/></button></div><h2>Откуда начнём?</h2><p className="modal-description">Выберите музыкальную площадку</p><div className="platform-list">{platforms.map((p,i)=><button className={chosen===p?'platform-option selected':'platform-option'} onClick={() => pickPlatform(p)} key={p}><span className={`platform-logo p${i}`}>{i===0?'◉':i===1?'ᴠ':'Я'}</span><span className="platform-name"><strong>{p}</strong><span>{i===0?'Музыка со всего мира':i===1?'Музыка и подкасты':'Музыка для каждого дня'}</span></span><span className="status-soon">{i === 0 ? 'Не подключён' : 'Скоро'}</span></button>)}</div><label className="remember-check"><input type="checkbox" checked={remember} onChange={e => {setRemember(e.target.checked);localStorage.setItem('blink-remember',String(e.target.checked))}}/><span className="checkmark"/><span>Запомнить мой выбор</span></label><button className="modal-continue" onClick={() => setShowPicker(false)}>Продолжить <span>→</span></button><p className="modal-note">Spotify OAuth ещё не настроен · VK и Яндекс.Музыка появятся позже</p></section></div>}
+    {showPicker && <div className="modal-backdrop" onClick={() => setShowPicker(false)}><section className="source-modal" onClick={e => e.stopPropagation()}><div className="modal-top"><span className="eyebrow">ВАША МУЗЫКА, В ОДНОМ МЕСТЕ</span><button className="modal-close" onClick={() => setShowPicker(false)} aria-label="Закрыть"><X size={19}/></button></div><h2>Откуда начнём?</h2><p className="modal-description">Выберите музыкальную площадку</p><div className="platform-list">{platforms.map((p,i)=><button className={chosen===p?'platform-option selected':'platform-option'} onClick={() => pickPlatform(p)} key={p}><span className={`platform-logo p${i}`}>{i===0?'◉':i===1?'ᴠ':'Я'}</span><span className="platform-name"><strong>{p}</strong><span>{i===0?'Музыка со всего мира':i===1?'Музыка и подкасты':'Музыка для каждого дня'}</span></span><span className="status-soon">{i === 0 ? (spotifyConnected ? 'Подключён' : 'Не подключён') : 'Скоро'}</span></button>)}</div><label className="remember-check"><input type="checkbox" checked={remember} onChange={e => {setRemember(e.target.checked);localStorage.setItem('blink-remember',String(e.target.checked))}}/><span className="checkmark"/><span>Запомнить мой выбор</span></label><button className="modal-continue" onClick={() => chosen === 'Spotify' && !spotifyConnected ? void connectSpotify() : setShowPicker(false)} disabled={spotifyBusy}>{spotifyBusy ? 'Открываем Spotify…' : chosen === 'Spotify' && !spotifyConnected ? 'Подключить Spotify' : 'Продолжить'} <span>→</span></button><p className="modal-note">{spotifyConnected ? 'Spotify подключён для этого устройства' : 'Для закрытого бета-теста используется OAuth PKCE · Client Secret не нужен'}</p>{spotifyConnected && <button className="text-link" onClick={() => void disconnectSpotify()}>Отключить Spotify</button>}</section></div>}
   </main>
 }
 export default App
