@@ -24,15 +24,17 @@ Completed
 - Kept the remember-selection checkbox in the platform picker; removed duplicate remember-selection and theme controls from Settings as requested.
 - Removed the unused alternate theme control and palette swatches from Settings.
 - Fixed cover asset URLs so images load in packaged Electron builds using file://.
-- Corrected provider labels: Spotify is shown as not connected until real OAuth is implemented; other unimplemented providers are marked as coming later.
+- Added Spotify Authorization Code with PKCE for the closed beta. The public Client ID is used by the renderer; no Client Secret is stored or requested.
+- Added an Electron-only loopback callback at http://127.0.0.1:43821/callback, state validation, encrypted token storage through Windows safeStorage, token refresh, and disconnect handling.
+- Added Spotify connection status and connect/disconnect actions to the platform picker.
 
+Verification
 ------------
-- npm run build: passed after the local audio library and Electron asset-path fix.
-- npm run lint: passed.
-- npm run desktop:build: passed; refreshed release\\Blink Setup 0.1.0.exe with relative asset URLs.
-- Started the freshly packaged unpacked Electron app. Desktop screenshot verification was unavailable because desktop control was owned by the user.
-- Browser preview loaded the home screen with no JavaScript console errors.
-- Browser interaction automation returned an internal tool error, so audio import/playback was not fully verified end to end.
+- npm run build: passed after the Spotify PKCE integration.
+- npm run lint: passed with one existing React set-state-in-effect warning; no lint errors remain.
+- npm run desktop:build: passed; refreshed release\\Blink Setup 0.1.0.exe.
+- Started the freshly packaged unpacked Electron app and confirmed the process launches. Full OAuth completion still requires an interactive Spotify account authorization in the browser.
+- Spotify Developer app created in Development mode with Web API and redirect URI http://127.0.0.1:43821/callback. Development mode is limited to the owner and up to five allowlisted users.
 
 Important limitations
 ---------------------
