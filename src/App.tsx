@@ -50,6 +50,43 @@ const openLibrary = () => new Promise<IDBDatabase>((resolve, reject) => {
   request.onsuccess = () => resolve(request.result)
   request.onerror = () => reject(request.error)
 })
+const openImageCache = () => new Promise<IDBDatabase>((resolve, reject) => {
+  const request = indexedDB.open('blink-image-cache', 1)
+  request.onupgradeneeded = () => request.result.createObjectStore('covers', { keyPath: 'url' })
+  request.onsuccess = () => resolve(request.result)
+  request.onerror = () => reject(request.error)
+})
+const cachedImageUrls = new Map<string, string>()
+const cacheImage = async (url: string) => {
+  const existing = cachedImageUrls.get(url)
+  if (existing) return existing
+  const db = await openImageCache()
+  const cached = await new Promise<{ blob?: Blob } | undefined>((resolve, reject) => {
+    const request = db.transaction('covers').objectStore('covers').get(url)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  if (cached?.blob) {
+    const objectUrl = URL.createObjectURL(cached.blob)
+    cachedImageUrls.set(url, objectUrl)
+    return objectUrl
+  }
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Cover request failed (${response.status})`)
+  const blob = await response.blob()
+  await new Promise<void>((resolve, reject) => {
+    const request = db.transaction('covers', 'readwrite').objectStore('covers').put({ url, blob, savedAt: Date.now() })
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error)
+  })
+  const objectUrl = URL.createObjectURL(blob)
+  cachedImageUrls.set(url, objectUrl)
+  return objectUrl
+}
+const hydrateCoverImages = async (items: Track[]) => Promise.all(items.map(async track => {
+  if (!track.image) return track
+  try { return { ...track, image: await cacheImage(track.image) } } catch { return track }
+}))
 
 function App() {
   const [chosen, setChosen] = useState<Platform>(() => (localStorage.getItem('blink-platform') as Platform) || 'Spotify')
@@ -107,7 +144,7 @@ function App() {
         for (let offset = 0; offset < 1000; offset += 50) {
           const response = await spotifyBridge.api(`/me/tracks?${new URLSearchParams({ limit: '50', offset: String(offset), market: spotifyMarket })}`) as { items?: SpotifySavedTrack[]; next?: string | null }
           const items = response.items || []
-          saved.push(...items.map(({ track }) => ({ title: track.name, artist: track.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(track.duration_ms / 1000), image: track.album.images[0]?.url, externalUrl: track.external_urls.spotify, uri: `spotify:track:${track.id}`, fileId: `spotify-${track.id}` })))
+          saved.push(...await hydrateCoverImages(items.map(({ track }) => ({ title: track.name, artist: track.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(track.duration_ms / 1000), image: track.album.images[0]?.url, externalUrl: track.external_urls.spotify, uri: `spotify:track:${track.id}`, fileId: `spotify-${track.id}` }))))
           if (!response.next || items.length < 50) break
         }
         if (!cancelled) setSpotifyFavorites(saved)
@@ -132,7 +169,7 @@ function App() {
     return () => { window.onSpotifyWebPlaybackSDKReady = previousReady; script.remove() }
   }, [])
   useEffect(() => { if (!audioRef.current || current.uri) return; if (playing) void audioRef.current.play().catch(() => setPlaying(false)); else audioRef.current.pause() }, [current, playing])
-  useEffect(() => { if (!query.trim() || !spotifyConnected || !hasSpotifyBridge || chosen !== 'Spotify') { setSpotifyTracks([]); setSpotifyError(''); return } setSpotifyError(''); const timer = window.setTimeout(() => { void spotifyBridge.api(`/search?${new URLSearchParams({ q: query, type: 'track', limit: '10', market: spotifyMarket })}`).then(response => { const data = response as SpotifySearchResponse; setSpotifyTracks((data.tracks?.items || []).map(item => ({ title: item.name, artist: item.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(item.duration_ms / 1000), image: item.album.images[0]?.url, externalUrl: item.external_urls.spotify, uri: `spotify:track:${item.id}`, fileId: `spotify-${item.id}` }))) }).catch(error => { console.error(error); const detail = error instanceof Error ? error.message.replace(/^Error: /, '') : String(error); setSpotifyError(`Не удалось выполнить поиск Spotify: ${detail}`) }) }, 350); return () => window.clearTimeout(timer) }, [chosen, query, spotifyConnected])
+  useEffect(() => { if (!query.trim() || !spotifyConnected || !hasSpotifyBridge || chosen !== 'Spotify') { setSpotifyTracks([]); setSpotifyError(''); return } setSpotifyError(''); const timer = window.setTimeout(() => { void spotifyBridge.api(`/search?${new URLSearchParams({ q: query, type: 'track', limit: '10', market: spotifyMarket })}`).then(response => { const data = response as SpotifySearchResponse; void hydrateCoverImages((data.tracks?.items || []).map(item => ({ title: item.name, artist: item.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(item.duration_ms / 1000), image: item.album.images[0]?.url, externalUrl: item.external_urls.spotify, uri: `spotify:track:${item.id}`, fileId: `spotify-${item.id}` }))).then(setSpotifyTracks) }).catch(error => { console.error(error); const detail = error instanceof Error ? error.message.replace(/^Error: /, '') : String(error); setSpotifyError(`Не удалось выполнить поиск Spotify: ${detail}`) }) }, 350); return () => window.clearTimeout(timer) }, [chosen, query, spotifyConnected])
   useEffect(() => {
     if (!spotifyConnected || !spotifySdkReady || !hasSpotifyBridge || !window.Spotify) return
     const player = new window.Spotify.Player({
