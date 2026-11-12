@@ -115,9 +115,10 @@ function createEdgeServer() {
         const stored = readTokens(); if (!stored) return sendJson(401, { error: 'Spotify is not connected' })
         const tokens = await refreshSpotifyToken(stored)
         const spotifyResponse = await fetch(`https://api.spotify.com/v1${url.searchParams.get('path') || '/'}`, { method: request.method === 'POST' ? 'POST' : request.method === 'PUT' ? 'PUT' : request.method === 'DELETE' ? 'DELETE' : 'GET', headers: { Authorization: `Bearer ${tokens.access_token}`, ...(request.method !== 'GET' ? { 'Content-Type': 'application/json' } : {}) }, ...(request.method !== 'GET' ? { body: await readBody().then(JSON.stringify) } : {}) })
-        if (!spotifyResponse.ok) return sendJson(spotifyResponse.status, { error: await spotifyResponse.text() })
-        if (spotifyResponse.status === 204) { response.writeHead(204).end(); return }
-        return sendJson(200, await spotifyResponse.json())
+        const spotifyBody = await spotifyResponse.text()
+        if (!spotifyResponse.ok) return sendJson(spotifyResponse.status, { error: spotifyBody || 'Spotify returned an empty error response' })
+        if (!spotifyBody.trim()) { response.writeHead(204, { 'Access-Control-Allow-Origin': '*' }).end(); return }
+        return sendJson(200, JSON.parse(spotifyBody))
       }
       const filePath = url.pathname === '/' ? join(import.meta.dirname, '../dist/index.html') : join(import.meta.dirname, '../dist', url.pathname.slice(1))
       if (!existsSync(filePath)) return response.writeHead(404).end()
