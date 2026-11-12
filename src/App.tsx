@@ -153,6 +153,14 @@ function App() {
   }
   const toggleFavorite = (title: string) => setFavoriteIds(items => items.includes(title) ? items.filter(i => i !== title) : [...items, title])
   const spotifyPlaybackError = (error: unknown) => { const detail = error instanceof Error ? error.message : String(error); setSpotifyError(`Spotify не запустил трек: ${detail}`) }
+  const waitForSpotifyDevice = async (deviceId: string) => {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const response = await window.blink?.spotify.api('/me/player/devices') as { devices?: Array<{ id: string; is_active?: boolean }> } | null
+      if (response?.devices?.some(device => device.id === deviceId)) return
+      await new Promise(resolve => window.setTimeout(resolve, 500))
+    }
+    throw new Error('Устройство Blink ещё не появилось в Spotify Connect')
+  }
   const waitForSpotifyPlayback = async (deviceId: string) => {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await new Promise(resolve => window.setTimeout(resolve, 400))
@@ -166,6 +174,7 @@ function App() {
     try {
       await spotifyPlayer.activateElement()
       const deviceId = spotifyDeviceIdRef.current
+      await waitForSpotifyDevice(deviceId)
       await window.blink?.spotify.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
       await new Promise(resolve => window.setTimeout(resolve, 300))
       await window.blink?.spotify.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
