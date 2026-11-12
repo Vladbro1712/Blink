@@ -118,6 +118,7 @@ function App() {
   const spotifyRecoveryTrackRef = useRef<Track | null>(null)
   const spotifyRecoveryRetryRef = useRef(0)
   const currentTrackRef = useRef(current)
+  const spotifyPositionAnchorRef = useRef({ position: 0, timestamp: 0 })
   currentTrackRef.current = current
   const audioRef = useRef<HTMLAudioElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -133,6 +134,16 @@ function App() {
   useEffect(() => { localStorage.setItem('blink-favorites', JSON.stringify(favoriteIds)) }, [favoriteIds])
   useEffect(() => { void openLibrary().then(db => { const request = db.transaction('audio').objectStore('audio').getAll(); request.onsuccess = () => setLocalTracks((request.result as Array<Track & { blob: Blob }>).map(({ blob, ...track }) => ({ ...track, src: URL.createObjectURL(blob) }))) }) }, [])
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100 }, [volume])
+  useEffect(() => {
+    if (!current.uri || !spotifyPlayer || !spotifyReady || !playing) return
+    const timer = window.setInterval(() => {
+      const anchor = spotifyPositionAnchorRef.current
+      if (!anchor.timestamp) return
+      const elapsed = (performance.now() - anchor.timestamp) / 1000
+      setPosition(Math.min(duration || Number.POSITIVE_INFINITY, anchor.position + elapsed))
+    }, 250)
+    return () => window.clearInterval(timer)
+  }, [current.uri, duration, playing, spotifyPlayer, spotifyReady])
   useEffect(() => { void spotifyBridge.status().then(async connected => { setSpotifyConnected(connected); if (connected) { try { setSpotifyProfile(await spotifyBridge.api('/me') as SpotifyProfile) } catch { setSpotifyConnected(false) } } }) }, [])
   useEffect(() => {
     if (!spotifyConnected || !hasSpotifyBridge) { setSpotifyFavorites([]); return }
@@ -223,6 +234,7 @@ function App() {
       if (!state) return
       setPlaying(!state.paused)
       setPosition(state.position / 1000)
+      spotifyPositionAnchorRef.current = { position: state.position / 1000, timestamp: performance.now() }
       setDuration(state.duration / 1000)
       const track = state.track_window?.current_track
       if (track && track.id) setCurrent({ title: track.name, artist: track.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime((track.duration_ms || state.duration) / 1000), image: track.album.images[0]?.url, externalUrl: `https://open.spotify.com/track/${track.id}`, uri: track.uri, fileId: `spotify-${track.id}` })
@@ -298,7 +310,7 @@ function App() {
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
           await spotifyBridge.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
-          await new Promise(resolve => window.setTimeout(resolve, 500))
+          await new Promise(resolve => window.setTimeout(resolve, 150))
           await spotifyBridge.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
           lastError = undefined
           break
@@ -316,7 +328,7 @@ function App() {
     }
   }
   const togglePlayback = () => { if (current.uri && spotifyPlayer && spotifyReady) { void spotifyPlayer.togglePlay().catch(spotifyPlaybackError); return } if (current.src) setPlaying(value => !value); else fileInputRef.current?.click() }
-  const seekPlayback = (seconds: number) => { setPosition(seconds); if (current.uri && spotifyPlayer && spotifyReady) void spotifyPlayer.seek(seconds * 1000).catch(spotifyPlaybackError); else if (audioRef.current) audioRef.current.currentTime = seconds }
+  const seekPlayback = (seconds: number) => { setPosition(seconds); spotifyPositionAnchorRef.current = { position: seconds, timestamp: performance.now() }; if (current.uri && spotifyPlayer && spotifyReady) void spotifyPlayer.seek(seconds * 1000).catch(spotifyPlaybackError); else if (audioRef.current) audioRef.current.currentTime = seconds }
   const playTrack = (track: Track) => { if (track.uri) { void startSpotifyTrack(track); return } if (track.externalUrl) { window.open(track.externalUrl, '_blank', 'noopener,noreferrer'); return } setCurrent(track); setPlaying(Boolean(track.src)); setPosition(0) }
   const importFiles = (files: FileList | null) => {
     if (!files) return
