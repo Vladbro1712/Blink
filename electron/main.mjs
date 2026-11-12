@@ -1,6 +1,9 @@
-import { app, BrowserWindow, components, ipcMain, safeStorage, shell } from 'electron'
+import { app, components, ipcMain, safeStorage, shell } from 'electron'
 import { createServer } from 'node:http'
+import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { execFile } from 'node:child_process'
 import Store from 'electron-store'
 
 const store = new Store()
@@ -43,14 +46,14 @@ async function refreshSpotifyToken(tokens) {
 
 function waitForSpotifyCallback(authUrl, codeVerifier, expectedState) {
   return new Promise((resolve, reject) => {
-    const server = createServer(async (request, response) => {
+    const callbackServer = createServer(async (request, response) => {
       const callback = new URL(request.url || '/', spotifyRedirectUri)
       if (callback.pathname !== '/callback') {
         response.writeHead(404).end()
         return
       }
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end('<!doctype html><title>Blink</title><p>Авторизация завершена. Можно вернуться в Blink.</p>')
-      server.close()
+      callbackServer.close()
       if (callback.searchParams.get('state') !== expectedState) {
         reject(new Error('Spotify authorization state mismatch'))
         return
@@ -81,31 +84,54 @@ function waitForSpotifyCallback(authUrl, codeVerifier, expectedState) {
         reject(error)
       }
     })
-    server.on('error', reject)
-    server.listen(43821, '127.0.0.1', () => { void shell.openExternal(authUrl) })
+    callbackServer.on('error', reject)
+    callbackServer.listen(43821, '127.0.0.1', () => { void shell.openExternal(authUrl) })
   })
 }
 
-function createWindow() {
-  const window = new BrowserWindow({
-    width: 1380,
-    height: 900,
-    minWidth: 760,
-    minHeight: 600,
-    backgroundColor: '#f8f7f4',
-    title: 'Blink',
-    webPreferences: {
-      preload: join(import.meta.dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
+function createEdgeServer() {
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url || '/', 'http://127.0.0.1:43820')
+    const sendJson = (status, value) => { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }); response.end(JSON.stringify(value)) }
+    const readBody = async () => { let body = ''; for await (const chunk of request) body += chunk; return body ? JSON.parse(body) : {} }
+    try {
+      if (url.pathname === '/api/spotify/status') return sendJson(200, Boolean(readTokens()))
+      if (url.pathname === '/api/spotify/token') {
+        const stored = readTokens(); if (!stored) return sendJson(401, { error: 'Spotify is not connected' })
+        return sendJson(200, { token: (await refreshSpotifyToken(stored)).access_token })
+      }
+      if (url.pathname === '/api/spotify/disconnect' && request.method === 'POST') { store.delete('spotify-tokens'); return sendJson(200, { ok: true }) }
+      if (url.pathname === '/api/spotify/auth-start' && request.method === 'POST') {
+        const args = await readBody(); void waitForSpotifyCallback(args.authUrl, args.codeVerifier, args.state).then(() => sendJson(200, { ok: true })).catch(error => sendJson(500, { error: error.message }))
+        return
+      }
+      if (url.pathname === '/api/spotify/api') {
+        const stored = readTokens(); if (!stored) return sendJson(401, { error: 'Spotify is not connected' })
+        const tokens = await refreshSpotifyToken(stored)
+        const spotifyResponse = await fetch(`https://api.spotify.com/v1${url.searchParams.get('path') || '/'}`, { method: request.method === 'POST' ? 'POST' : request.method === 'PUT' ? 'PUT' : 'GET', headers: { Authorization: `Bearer ${tokens.access_token}`, ...(request.method !== 'GET' ? { 'Content-Type': 'application/json' } : {}) }, ...(request.method !== 'GET' ? { body: await readBody().then(JSON.stringify) } : {}) })
+        if (!spotifyResponse.ok) return sendJson(spotifyResponse.status, { error: await spotifyResponse.text() })
+        if (spotifyResponse.status === 204) { response.writeHead(204).end(); return }
+        return sendJson(200, await spotifyResponse.json())
+      }
+      const filePath = url.pathname === '/' ? join(import.meta.dirname, '../dist/index.html') : join(import.meta.dirname, '../dist', url.pathname.slice(1))
+      if (!existsSync(filePath)) return response.writeHead(404).end()
+      const content = await readFile(filePath)
+      const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png', '.ico': 'image/x-icon' }
+      response.writeHead(200, { 'Content-Type': contentTypes[filePath.slice(filePath.lastIndexOf('.'))] || 'application/octet-stream' }).end(content)
+    } catch (error) { sendJson(500, { error: error instanceof Error ? error.message : String(error) }) }
   })
+  return new Promise(resolve => server.listen(43820, '127.0.0.1', () => resolve(server)))
+}
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    window.loadURL(process.env.VITE_DEV_SERVER_URL)
-  } else {
-    window.loadFile(join(import.meta.dirname, '../dist/index.html'))
-  }
+function openEdge() {
+  const candidates = [
+    join(process.env.ProgramFiles || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    join(process.env['PROGRAMFILES(X86)'] || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+  ]
+  const edge = candidates.find(candidate => existsSync(candidate)) || 'msedge.exe'
+  const profile = join(app.getPath('userData'), 'edge-profile')
+  execFile(edge, [`--app=http://127.0.0.1:43820/`, `--user-data-dir=${profile}`, '--no-first-run'], error => { if (error) console.error('Failed to open Microsoft Edge', error) })
 }
 
 ipcMain.handle('spotify-status', () => Boolean(readTokens()))
@@ -147,10 +173,9 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error('Widevine components failed', error)
   }
-  createWindow()
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
+  await createEdgeServer()
+  openEdge()
+  app.on('activate', () => openEdge())
 })
 
 app.on('window-all-closed', () => {

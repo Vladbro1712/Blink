@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Heart, Home, ListMusic, Music2, Pause, Play, Search, Settings, SkipBack, SkipForward, Upload, Volume2, X } from 'lucide-react'
+import { spotifyBridge, hasSpotifyBridge } from './spotifyBridge'
 import './App.css'
 
 type Platform = 'Spotify' | 'VK Музыка' | 'Яндекс Музыка'
@@ -86,7 +87,7 @@ function App() {
   useEffect(() => { localStorage.setItem('blink-favorites', JSON.stringify(favoriteIds)) }, [favoriteIds])
   useEffect(() => { void openLibrary().then(db => { const request = db.transaction('audio').objectStore('audio').getAll(); request.onsuccess = () => setLocalTracks((request.result as Array<Track & { blob: Blob }>).map(({ blob, ...track }) => ({ ...track, src: URL.createObjectURL(blob) }))) }) }, [])
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100 }, [volume])
-  useEffect(() => { void window.blink?.spotify.status().then(async connected => { setSpotifyConnected(connected); if (connected) { try { setSpotifyProfile(await window.blink?.spotify.api('/me') as SpotifyProfile) } catch { setSpotifyConnected(false) } } }) }, [])
+  useEffect(() => { void spotifyBridge.status().then(async connected => { setSpotifyConnected(connected); if (connected) { try { setSpotifyProfile(await spotifyBridge.api('/me') as SpotifyProfile) } catch { setSpotifyConnected(false) } } }) }, [])
   useEffect(() => {
     if (window.Spotify) { setSpotifySdkReady(true); return }
     const previousReady = window.onSpotifyWebPlaybackSDKReady
@@ -99,12 +100,12 @@ function App() {
     return () => { window.onSpotifyWebPlaybackSDKReady = previousReady; script.remove() }
   }, [])
   useEffect(() => { if (!audioRef.current || current.uri) return; if (playing) void audioRef.current.play().catch(() => setPlaying(false)); else audioRef.current.pause() }, [current, playing])
-  useEffect(() => { if (!query.trim() || !spotifyConnected || !window.blink || chosen !== 'Spotify') { setSpotifyTracks([]); setSpotifyError(''); return } setSpotifyError(''); const timer = window.setTimeout(() => { void window.blink?.spotify.api(`/search?${new URLSearchParams({ q: query, type: 'track', limit: '10', market: spotifyMarket })}`).then(response => { const data = response as SpotifySearchResponse; setSpotifyTracks((data.tracks?.items || []).map(item => ({ title: item.name, artist: item.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(item.duration_ms / 1000), image: item.album.images[0]?.url, externalUrl: item.external_urls.spotify, uri: `spotify:track:${item.id}`, fileId: `spotify-${item.id}` }))) }).catch(error => { console.error(error); const detail = error instanceof Error ? error.message.replace(/^Error: /, '') : String(error); setSpotifyError(`Не удалось выполнить поиск Spotify: ${detail}`) }) }, 350); return () => window.clearTimeout(timer) }, [chosen, query, spotifyConnected])
+  useEffect(() => { if (!query.trim() || !spotifyConnected || !hasSpotifyBridge || chosen !== 'Spotify') { setSpotifyTracks([]); setSpotifyError(''); return } setSpotifyError(''); const timer = window.setTimeout(() => { void spotifyBridge.api(`/search?${new URLSearchParams({ q: query, type: 'track', limit: '10', market: spotifyMarket })}`).then(response => { const data = response as SpotifySearchResponse; setSpotifyTracks((data.tracks?.items || []).map(item => ({ title: item.name, artist: item.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(item.duration_ms / 1000), image: item.album.images[0]?.url, externalUrl: item.external_urls.spotify, uri: `spotify:track:${item.id}`, fileId: `spotify-${item.id}` }))) }).catch(error => { console.error(error); const detail = error instanceof Error ? error.message.replace(/^Error: /, '') : String(error); setSpotifyError(`Не удалось выполнить поиск Spotify: ${detail}`) }) }, 350); return () => window.clearTimeout(timer) }, [chosen, query, spotifyConnected])
   useEffect(() => {
-    if (!spotifyConnected || !spotifySdkReady || !window.blink || !window.Spotify) return
+    if (!spotifyConnected || !spotifySdkReady || !hasSpotifyBridge || !window.Spotify) return
     const player = new window.Spotify.Player({
       name: 'Blink',
-      getOAuthToken: callback => { void window.blink?.spotify.token().then(callback).catch(error => setSpotifyError(error instanceof Error ? error.message : String(error))) },
+      getOAuthToken: callback => { void spotifyBridge.token().then(callback).catch(error => setSpotifyError(error instanceof Error ? error.message : String(error))) },
       volume: 0.7,
       enableMediaSession: true,
     })
@@ -171,7 +172,7 @@ function App() {
   useEffect(() => { if (spotifyPlayer && spotifyReady) void spotifyPlayer.setVolume(volume / 100) }, [spotifyPlayer, spotifyReady, volume])
   const pickPlatform = (platform: Platform) => { setChosen(platform); if (remember) { localStorage.setItem('blink-platform', platform); setShowPicker(false) } }
   const connectSpotify = async () => {
-    if (!window.blink || spotifyBusy) return
+    if (!hasSpotifyBridge || spotifyBusy) return
     setSpotifyBusy(true)
     try {
       const codeVerifier = createRandomString(64)
@@ -187,7 +188,7 @@ function App() {
         state,
         scope: 'user-read-private user-read-email user-read-currently-playing user-read-playback-state user-modify-playback-state streaming',
       }).toString()
-      await window.blink.spotify.authenticate({ authUrl: authUrl.toString(), codeVerifier, state })
+      await spotifyBridge.authenticate({ authUrl: authUrl.toString(), codeVerifier, state })
       setSpotifyConnected(true)
       setChosen('Spotify')
       setShowPicker(false)
@@ -198,7 +199,7 @@ function App() {
     }
   }
   const disconnectSpotify = async () => {
-    await window.blink?.spotify.disconnect()
+    await spotifyBridge.disconnect()
     setSpotifyConnected(false)
   }
   const toggleFavorite = (title: string) => setFavoriteIds(items => items.includes(title) ? items.filter(i => i !== title) : [...items, title])
@@ -207,7 +208,7 @@ function App() {
     for (let attempt = 0; attempt < 10; attempt += 1) {
       await new Promise(resolve => window.setTimeout(resolve, 500))
       try {
-        const state = await window.blink?.spotify.api('/me/player') as { device?: { id?: string }; is_playing?: boolean; item?: { name?: string } } | null
+        const state = await spotifyBridge.api('/me/player') as { device?: { id?: string }; is_playing?: boolean; item?: { name?: string } } | null
         if (state?.device?.id === deviceId && state.is_playing) return state
       } catch {
         // The device can remain unavailable briefly while Spotify registers it.
@@ -227,9 +228,9 @@ function App() {
       let lastError: unknown
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
-          await window.blink?.spotify.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
+          await spotifyBridge.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
           await new Promise(resolve => window.setTimeout(resolve, 500))
-          await window.blink?.spotify.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
+          await spotifyBridge.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
           lastError = undefined
           break
         } catch (error) {
