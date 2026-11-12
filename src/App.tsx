@@ -152,9 +152,33 @@ function App() {
     setSpotifyConnected(false)
   }
   const toggleFavorite = (title: string) => setFavoriteIds(items => items.includes(title) ? items.filter(i => i !== title) : [...items, title])
-  const togglePlayback = () => { if (current.uri && spotifyPlayer && spotifyReady) { void spotifyPlayer.togglePlay().catch(error => setSpotifyError(error instanceof Error ? error.message : String(error))); return } if (current.src) setPlaying(value => !value); else fileInputRef.current?.click() }
-  const seekPlayback = (seconds: number) => { setPosition(seconds); if (current.uri && spotifyPlayer && spotifyReady) void spotifyPlayer.seek(seconds * 1000); else if (audioRef.current) audioRef.current.currentTime = seconds }
-  const playTrack = (track: Track) => { if (track.uri) { if (!spotifyPlayer || !spotifyReady) { setSpotifyError('Встроенный Spotify-плеер ещё не готов. Проверьте установку Widevine и подключение аккаунта.'); return } void spotifyPlayer.activateElement().then(() => window.blink?.spotify.api('/me/player', { method: 'PUT', body: { device_ids: [spotifyDeviceIdRef.current] } })).then(() => window.blink?.spotify.api('/me/player/play', { method: 'PUT', body: { uris: [track.uri] } })).catch(error => setSpotifyError(error instanceof Error ? error.message : String(error))); return } if (track.externalUrl) { window.open(track.externalUrl, '_blank', 'noopener,noreferrer'); return } setCurrent(track); setPlaying(Boolean(track.src)); setPosition(0) }
+  const spotifyPlaybackError = (error: unknown) => { const detail = error instanceof Error ? error.message : String(error); setSpotifyError(`Spotify не запустил трек: ${detail}`) }
+  const waitForSpotifyPlayback = async (deviceId: string) => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await new Promise(resolve => window.setTimeout(resolve, 400))
+      const state = await window.blink?.spotify.api('/me/player') as { device?: { id?: string }; is_playing?: boolean; item?: { name?: string } } | null
+      if (state?.device?.id === deviceId && state.is_playing) return state
+    }
+    throw new Error('Spotify не подтвердил начало воспроизведения. Проверьте активный Premium-сеанс и разрешение streaming.')
+  }
+  const startSpotifyTrack = async (track: Track) => {
+    if (!spotifyPlayer || !spotifyReady || !spotifyDeviceIdRef.current) { setSpotifyError('Spotify-плеер Blink ещё не готов. Перезапустите Blink и дождитесь подключения устройства.'); return }
+    try {
+      await spotifyPlayer.activateElement()
+      const deviceId = spotifyDeviceIdRef.current
+      await window.blink?.spotify.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
+      await new Promise(resolve => window.setTimeout(resolve, 300))
+      await window.blink?.spotify.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
+      await waitForSpotifyPlayback(deviceId)
+      setCurrent(track)
+      setPlaying(true)
+    } catch (error) {
+      spotifyPlaybackError(error)
+    }
+  }
+  const togglePlayback = () => { if (current.uri && spotifyPlayer && spotifyReady) { void spotifyPlayer.togglePlay().catch(spotifyPlaybackError); return } if (current.src) setPlaying(value => !value); else fileInputRef.current?.click() }
+  const seekPlayback = (seconds: number) => { setPosition(seconds); if (current.uri && spotifyPlayer && spotifyReady) void spotifyPlayer.seek(seconds * 1000).catch(spotifyPlaybackError); else if (audioRef.current) audioRef.current.currentTime = seconds }
+  const playTrack = (track: Track) => { if (track.uri) { void startSpotifyTrack(track); return } if (track.externalUrl) { window.open(track.externalUrl, '_blank', 'noopener,noreferrer'); return } setCurrent(track); setPlaying(Boolean(track.src)); setPosition(0) }
   const importFiles = (files: FileList | null) => {
     if (!files) return
     const validFiles = Array.from(files).filter(file => file.type.startsWith('audio/'))
