@@ -74,6 +74,8 @@ function App() {
   const spotifyDeviceIdRef = useRef('')
   const spotifyReconnectTimerRef = useRef<number | null>(null)
   const spotifyReconnectAttemptRef = useRef(0)
+  const spotifyReadyTimerRef = useRef<number | null>(null)
+  const spotifyConnectRef = useRef<(() => void) | null>(null)
   const spotifyRecoveryTrackRef = useRef<Track | null>(null)
   const spotifyRecoveryRetryRef = useRef(0)
   const currentTrackRef = useRef(current)
@@ -110,6 +112,8 @@ function App() {
       enableMediaSession: true,
     })
     player.addListener('ready', ({ device_id }: { device_id: string }) => {
+      if (spotifyReadyTimerRef.current !== null) window.clearTimeout(spotifyReadyTimerRef.current)
+      spotifyReadyTimerRef.current = null
       spotifyDeviceIdRef.current = device_id
       spotifyReconnectAttemptRef.current = 0
       setSpotifyReady(true)
@@ -124,17 +128,7 @@ function App() {
       if (!device_id || device_id === spotifyDeviceIdRef.current) spotifyDeviceIdRef.current = ''
       setSpotifyReady(false)
       setSpotifyError('Spotify временно потерял аудиоустройство. Восстанавливаем подключение…')
-      if (spotifyReconnectTimerRef.current === null) {
-        const reconnect = () => {
-          spotifyReconnectTimerRef.current = null
-          if (spotifyReconnectAttemptRef.current >= 5) return
-          spotifyReconnectAttemptRef.current += 1
-          void player.connect().then(connected => {
-            if (!connected) reconnect()
-          }).catch(() => reconnect())
-        }
-        spotifyReconnectTimerRef.current = window.setTimeout(reconnect, 1000)
-      }
+      if (spotifyReconnectTimerRef.current === null) spotifyReconnectTimerRef.current = window.setTimeout(() => { spotifyConnectRef.current?.() }, 1000)
     })
     player.addListener('authentication_error', ({ message }: { message: string }) => setSpotifyError(`Spotify: ${message}`))
     player.addListener('account_error', ({ message }: { message: string }) => setSpotifyError(`Spotify Premium нужен для воспроизведения: ${message}`))
@@ -158,11 +152,31 @@ function App() {
       const track = state.track_window?.current_track
       if (track && track.id) setCurrent({ title: track.name, artist: track.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime((track.duration_ms || state.duration) / 1000), image: track.album.images[0]?.url, externalUrl: `https://open.spotify.com/track/${track.id}`, uri: track.uri, fileId: `spotify-${track.id}` })
     })
-    setSpotifyPlayer(player)
-    void player.connect().then(connected => { if (!connected) setSpotifyError('Не удалось подключить Web Playback SDK') })
+    const connectPlayer = () => {
+      spotifyReconnectTimerRef.current = null
+      if (spotifyReady || spotifyReconnectAttemptRef.current >= 6) return
+      spotifyReconnectAttemptRef.current += 1
+      void player.connect().then(connected => {
+        if (connected) return
+        setSpotifyError(`Spotify-плеер не подключился (попытка ${spotifyReconnectAttemptRef.current}/6).`)
+        spotifyReconnectTimerRef.current = window.setTimeout(connectPlayer, 1500)
+      }).catch(error => {
+        const detail = error instanceof Error ? error.message : String(error)
+        setSpotifyError(`Не удалось подключить Spotify-плеер: ${detail}`)
+        spotifyReconnectTimerRef.current = window.setTimeout(connectPlayer, 1500)
+      })
+    }
+    connectPlayer()
+    spotifyConnectRef.current = connectPlayer
+    spotifyReadyTimerRef.current = window.setTimeout(() => {
+      if (!spotifyDeviceIdRef.current) setSpotifyError('Spotify SDK не зарегистрировал устройство в Edge. Проверьте Premium-аккаунт и разрешение воспроизведения.')
+    }, 10000)
     return () => {
       if (spotifyReconnectTimerRef.current !== null) window.clearTimeout(spotifyReconnectTimerRef.current)
+      if (spotifyReadyTimerRef.current !== null) window.clearTimeout(spotifyReadyTimerRef.current)
       spotifyReconnectTimerRef.current = null
+      spotifyReadyTimerRef.current = null
+      spotifyConnectRef.current = null
       player.disconnect()
       setSpotifyPlayer(null)
       setSpotifyReady(false)
