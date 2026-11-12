@@ -19,6 +19,7 @@ type SpotifyPlayer = {
   setVolume: (volume: number) => Promise<void>
 }
 type SpotifySearchResponse = { tracks?: { items: Array<{ id: string; name: string; duration_ms: number; artists: Array<{ name: string }>; album: { images: Array<{ url: string }> }; external_urls: { spotify: string } }> } }
+type SpotifySavedTrack = { added_at?: string; track: { id: string; name: string; duration_ms: number; artists: Array<{ name: string }>; album: { images: Array<{ url: string }> }; external_urls: { spotify: string } } }
 const platforms: Platform[] = ['Spotify', 'VK Музыка', 'Яндекс Музыка']
 const tracks: Track[] = [
   { title: 'A Walk', artist: 'Tycho', cover: 'photo-1470225620780-dba8ba36b745', color: '#b9b5a9', duration: '5:16' },
@@ -57,6 +58,9 @@ function App() {
   const [remember, setRemember] = useState(() => localStorage.getItem('blink-remember') !== 'false')
   const [showPicker, setShowPicker] = useState(() => !localStorage.getItem('blink-remember'))
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => JSON.parse(localStorage.getItem('blink-favorites') || '["A Walk","Kerala"]'))
+  const [spotifyFavorites, setSpotifyFavorites] = useState<Track[]>([])
+  const [spotifyFavoritesBusy, setSpotifyFavoritesBusy] = useState(false)
+  const [spotifyFavoritesRefresh, setSpotifyFavoritesRefresh] = useState(0)
   const [localTracks, setLocalTracks] = useState<Track[]>([])
   const [current, setCurrent] = useState<Track>(tracks[0])
   const [playing, setPlaying] = useState(false)
@@ -81,6 +85,11 @@ function App() {
   const audioRef = useRef<HTMLAudioElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const allTracks = useMemo(() => [...tracks, ...localTracks], [localTracks])
+  const favoriteTracks = useMemo(() => {
+    const local = [...allTracks, ...spotifyTracks].filter(track => favoriteIds.includes(track.fileId || track.title))
+    const known = new Set(local.map(track => track.uri || track.fileId || track.title))
+    return [...local, ...spotifyFavorites.filter(track => !known.has(track.uri || track.fileId || track.title))]
+  }, [allTracks, favoriteIds, spotifyFavorites, spotifyTracks])
   const localTrackIds = useMemo(() => new Set(localTracks.map(t => t.fileId)), [localTracks])
   const filtered = useMemo(() => [...allTracks, ...spotifyTracks].filter(t => `${t.title} ${t.artist}`.toLowerCase().includes(query.toLowerCase())), [allTracks, query, spotifyTracks])
   useEffect(() => { if (remember) localStorage.setItem('blink-platform', chosen) }, [chosen, remember])
@@ -88,6 +97,29 @@ function App() {
   useEffect(() => { void openLibrary().then(db => { const request = db.transaction('audio').objectStore('audio').getAll(); request.onsuccess = () => setLocalTracks((request.result as Array<Track & { blob: Blob }>).map(({ blob, ...track }) => ({ ...track, src: URL.createObjectURL(blob) }))) }) }, [])
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100 }, [volume])
   useEffect(() => { void spotifyBridge.status().then(async connected => { setSpotifyConnected(connected); if (connected) { try { setSpotifyProfile(await spotifyBridge.api('/me') as SpotifyProfile) } catch { setSpotifyConnected(false) } } }) }, [])
+  useEffect(() => {
+    if (!spotifyConnected || !hasSpotifyBridge) { setSpotifyFavorites([]); return }
+    let cancelled = false
+    const loadSpotifyFavorites = async () => {
+      setSpotifyFavoritesBusy(true)
+      try {
+        const saved: Track[] = []
+        for (let offset = 0; offset < 1000; offset += 50) {
+          const response = await spotifyBridge.api(`/me/tracks?${new URLSearchParams({ limit: '50', offset: String(offset), market: spotifyMarket })}`) as { items?: SpotifySavedTrack[]; next?: string | null }
+          const items = response.items || []
+          saved.push(...items.map(({ track }) => ({ title: track.name, artist: track.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(track.duration_ms / 1000), image: track.album.images[0]?.url, externalUrl: track.external_urls.spotify, uri: `spotify:track:${track.id}`, fileId: `spotify-${track.id}` })))
+          if (!response.next || items.length < 50) break
+        }
+        if (!cancelled) setSpotifyFavorites(saved)
+      } catch (error) {
+        if (!cancelled) setSpotifyError(`Не удалось загрузить любимые Spotify: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        if (!cancelled) setSpotifyFavoritesBusy(false)
+      }
+    }
+    void loadSpotifyFavorites()
+    return () => { cancelled = true }
+  }, [spotifyConnected, spotifyFavoritesRefresh])
   useEffect(() => {
     if (window.Spotify) { setSpotifySdkReady(true); return }
     const previousReady = window.onSpotifyWebPlaybackSDKReady
@@ -186,7 +218,7 @@ function App() {
         code_challenge_method: 'S256',
         code_challenge: codeChallenge,
         state,
-        scope: 'user-read-private user-read-email user-read-currently-playing user-read-playback-state user-modify-playback-state streaming',
+        scope: 'user-read-private user-read-email user-read-currently-playing user-read-playback-state user-modify-playback-state streaming user-library-read',
       }).toString()
       await spotifyBridge.authenticate({ authUrl: authUrl.toString(), codeVerifier, state })
       setSpotifyConnected(true)
@@ -271,7 +303,7 @@ function App() {
     const next = allTracks[(index + direction + allTracks.length) % allTracks.length]
     playTrack(next)
   }
-  const displayed = screen === 'favorites' ? filtered.filter(t => favoriteIds.includes(t.fileId || t.title)) : screen === 'library' ? filtered.filter(t => t.fileId && !t.externalUrl) : filtered
+  const displayed = screen === 'favorites' ? favoriteTracks : screen === 'library' ? filtered.filter(t => t.fileId && !t.externalUrl) : filtered
 
   return <main className="app">
     <aside className="sidebar">
@@ -296,7 +328,7 @@ function App() {
         {screen === 'home' || screen === 'library' ? <><div className="eyebrow">{screen === 'library' ? 'ВАША МУЗЫКА' : <>ПОДБРАНО ДЛЯ ВАС <span className="eyebrow-dot"/> {chosen.toUpperCase()}</>}</div><div className="welcome-row"><div><h1>{screen === 'library' ? <>Все треки<span>.</span></> : <>Чувствуй <span>момент.</span></>}</h1><p className="page-description">{screen === 'library' ? 'Ваша музыка с компьютера.' : 'Ваша музыка. Ваш ритм. Ваш Blink.'}</p></div>{screen === 'home' && <button className="date-label">ПОНЕДЕЛЬНИК, 10 НОЯБРЯ</button>}</div>
           {screen === 'home' && <section className="hero-feature" style={{backgroundImage:`linear-gradient(90deg,rgba(26,27,23,.72),rgba(30,29,24,.1)),url("${photo('photo-1470252649378-9c29740c9fa8')}")`}}><div className="hero-copy"><div className="hero-tag"><span/> ВЫБОР ДНЯ</div><h2>Найди свой<br/>тихий ритм.</h2><p>Музыка для моментов, когда хочется<br/>замедлиться и просто быть.</p><button className="hero-play" onClick={() => playTrack(tracks[0])}><Play size={15} fill="currentColor"/> Слушать подборку</button></div></section>}
           <section className="music-section"><div className="section-heading"><div><h2>{screen === 'library' ? 'Моя музыка' : 'Возможно, вам понравится'}</h2><p>{screen === 'library' ? `${localTracks.length} треков на этом устройстве` : 'Подборка и музыка с компьютера'}</p></div><button className="text-link import-link" onClick={() => fileInputRef.current?.click()}><Upload size={14}/> Добавить музыку</button><input ref={fileInputRef} className="visually-hidden" type="file" accept="audio/*" multiple onChange={event => { importFiles(event.target.files); event.target.value = '' }}/></div><div className="track-grid">{displayed.slice(0,screen === 'library' ? undefined : 6).map((track,i)=><article className="track-card" key={track.fileId || track.title}><div className="cover-wrap" style={{backgroundColor:track.color}}><img src={track.image || photo(track.cover)} alt="" loading="lazy"/><button className="cover-play" onClick={() => playTrack(track)} aria-label={`Играть ${track.title}`}><Play size={18} fill="currentColor"/></button><button className={favoriteIds.includes(track.fileId || track.title)?'track-heart liked':'track-heart'} onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Добавить в любимые"><Heart size={16} fill={favoriteIds.includes(track.fileId || track.title)?'currentColor':'none'}/></button><span className="track-index">0{i+1}</span></div><div className="track-details"><div><strong>{track.title}</strong><span>{track.artist}</span></div><button className="track-more" onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Добавить или убрать из любимых"><Heart size={15} fill={favoriteIds.includes(track.fileId || track.title)?'currentColor':'none'}/></button></div></article>)}</div>{spotifyProfile && <span className="spotify-profile">{spotifyProfile.display_name || spotifyProfile.email || 'Spotify подключён'}</span>}{spotifyError && <div className="empty-state">{spotifyError}</div>}</section>
-        </> : screen === 'favorites' && <><div className="eyebrow">ВАША КОЛЛЕКЦИЯ <span className="eyebrow-dot"/> {chosen.toUpperCase()}</div><div className="welcome-row"><div><h1>Любимые<span>.</span></h1><p className="page-description">Всё, что хочется переслушать.</p></div></div><div className="favorite-banner"><Heart size={30}/><div><strong>{favoriteIds.length} трека</strong><span>из вашей коллекции {chosen}</span></div></div><section className="music-section"><div className="section-heading"><div><h2>Сохранённое</h2><p>Ваша личная подборка</p></div></div><div className="track-grid">{displayed.map((track,i)=><article className="track-card" key={track.title}><div className="cover-wrap" style={{backgroundColor:track.color}}><img src={track.image || photo(track.cover)} alt="" loading="lazy"/><button className="cover-play" onClick={() => playTrack(track)} aria-label={`Играть ${track.title}`}><Play size={18} fill="currentColor"/></button><button className="track-heart liked" onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Убрать из любимых"><Heart size={16} fill="currentColor"/></button><span className="track-index">0{i+1}</span></div><div className="track-details"><div><strong>{track.title}</strong><span>{track.artist}</span></div></div></article>)}</div>{displayed.length === 0 && <div className="empty-state">Здесь пока пусто. Добавляйте треки в любимые на главной.</div>}</section></>}
+        </> : screen === 'favorites' && <><div className="eyebrow">ВАША КОЛЛЕКЦИЯ <span className="eyebrow-dot"/> {chosen.toUpperCase()}</div><div className="welcome-row"><div><h1>Любимые<span>.</span></h1><p className="page-description">Всё, что хочется переслушать.</p></div></div><div className="favorite-banner"><Heart size={30}/><div><strong>{favoriteIds.length} трека</strong><span>из вашей коллекции {chosen}</span></div></div><section className="music-section"><div className="section-heading"><div><h2>Сохранённое</h2><p>{spotifyFavoritesBusy ? 'Загружаем любимые Spotify…' : `${favoriteTracks.length} треков в коллекции`}</p></div><button className="text-link import-link" onClick={() => setSpotifyFavoritesRefresh(value => value + 1)} disabled={spotifyFavoritesBusy || !spotifyConnected} title="Обновить любимые Spotify">↻ Синхронизировать Spotify</button></div><div className="track-grid">{displayed.map((track,i)=><article className="track-card" key={track.title}><div className="cover-wrap" style={{backgroundColor:track.color}}><img src={track.image || photo(track.cover)} alt="" loading="lazy"/><button className="cover-play" onClick={() => playTrack(track)} aria-label={`Играть ${track.title}`}><Play size={18} fill="currentColor"/></button><button className="track-heart liked" onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Убрать из любимых"><Heart size={16} fill="currentColor"/></button><span className="track-index">0{i+1}</span></div><div className="track-details"><div><strong>{track.title}</strong><span>{track.artist}</span></div></div></article>)}</div>{displayed.length === 0 && <div className="empty-state">Здесь пока пусто. Добавляйте треки в любимые на главной.</div>}</section></>}
       </div>}
       <footer className="footer"><span>BLINK <span className="footer-dot">●</span> ВАША МУЗЫКА, ВАШИ ПРАВИЛА</span><span>СДЕЛАНО ДЛЯ МУЗЫКИ <Music2 size={12}/></span></footer>
     </section>
