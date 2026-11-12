@@ -114,7 +114,7 @@ function createEdgeServer() {
       if (url.pathname === '/api/spotify/api') {
         const stored = readTokens(); if (!stored) return sendJson(401, { error: 'Spotify is not connected' })
         const tokens = await refreshSpotifyToken(stored)
-        const spotifyResponse = await fetch(`https://api.spotify.com/v1${url.searchParams.get('path') || '/'}`, { method: request.method === 'POST' ? 'POST' : request.method === 'PUT' ? 'PUT' : 'GET', headers: { Authorization: `Bearer ${tokens.access_token}`, ...(request.method !== 'GET' ? { 'Content-Type': 'application/json' } : {}) }, ...(request.method !== 'GET' ? { body: await readBody().then(JSON.stringify) } : {}) })
+        const spotifyResponse = await fetch(`https://api.spotify.com/v1${url.searchParams.get('path') || '/'}`, { method: request.method === 'POST' ? 'POST' : request.method === 'PUT' ? 'PUT' : request.method === 'DELETE' ? 'DELETE' : 'GET', headers: { Authorization: `Bearer ${tokens.access_token}`, ...(request.method !== 'GET' ? { 'Content-Type': 'application/json' } : {}) }, ...(request.method !== 'GET' ? { body: await readBody().then(JSON.stringify) } : {}) })
         if (!spotifyResponse.ok) return sendJson(spotifyResponse.status, { error: await spotifyResponse.text() })
         if (spotifyResponse.status === 204) { response.writeHead(204).end(); return }
         return sendJson(200, await spotifyResponse.json())
