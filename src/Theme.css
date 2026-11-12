@@ -1,0 +1,167 @@
+.theme-black,
+.theme-forest,
+.theme-ocean,
+.theme-burgundy,
+.theme-purple {
+  --surface-strong: color-mix(in srgb, var(--surface) 86%, white 14%);
+  --surface-soft: color-mix(in srgb, var(--surface) 62%, var(--bg) 38%);
+}
+
+.theme-black .sidebar,
+.theme-forest .sidebar,
+.theme-ocean .sidebar,
+.theme-burgundy .sidebar,
+.theme-purple .sidebar,
+.theme-black .topbar,
+.theme-forest .topbar,
+.theme-ocean .topbar,
+.theme-burgundy .topbar,
+.theme-purple .topbar,
+.theme-black .player,
+.theme-forest .player,
+.theme-ocean .player,
+.theme-burgundy .player,
+.theme-purple .player {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.theme-black .nav-item,
+.theme-forest .nav-item,
+.theme-ocean .nav-item,
+.theme-burgundy .nav-item,
+.theme-purple .nav-item,
+.theme-black .source-inactive,
+.theme-forest .source-inactive,
+.theme-ocean .source-inactive,
+.theme-burgundy .source-inactive,
+.theme-purple .source-inactive {
+  color: var(--muted);
+}
+
+.theme-black .nav-item.active,
+.theme-forest .nav-item.active,
+.theme-ocean .nav-item.active,
+.theme-burgundy .nav-item.active,
+.theme-purple .nav-item.active {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.theme-black .track-card,
+.theme-forest .track-card,
+.theme-ocean .track-card,
+.theme-burgundy .track-card,
+.theme-purple .track-card {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.theme-black .track-details span,
+.theme-forest .track-details span,
+.theme-ocean .track-details span,
+.theme-burgundy .track-details span,
+.theme-purple .track-details span,
+.theme-black .page-description,
+.theme-forest .page-description,
+.theme-ocean .page-description,
+.theme-burgundy .page-description,
+.theme-purple .page-description,
+.theme-black .settings-section p,
+.theme-forest .settings-section p,
+.theme-ocean .settings-section p,
+.theme-burgundy .settings-section p,
+.theme-purple .settings-section p {
+  color: var(--muted);
+}
+
+.theme-black .favorite-banner,
+.theme-forest .favorite-banner,
+.theme-ocean .favorite-banner,
+.theme-burgundy .favorite-banner,
+.theme-purple .favorite-banner,
+.theme-black .settings-section,
+.theme-forest .settings-section,
+.theme-ocean .settings-section,
+.theme-burgundy .settings-section,
+.theme-purple .settings-section {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.theme-black .search-box,
+.theme-forest .search-box,
+.theme-ocean .search-box,
+.theme-burgundy .search-box,
+.theme-purple .search-box,
+.theme-black input,
+.theme-forest input,
+.theme-ocean input,
+.theme-burgundy input,
+.theme-purple input {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.theme-black .theme-option,
+.theme-forest .theme-option,
+.theme-ocean .theme-option,
+.theme-burgundy .theme-option,
+.theme-purple .theme-option {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.settings-section {
+  min-width: 0;
+  align-items: center;
+}
+
+.theme-settings {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.3fr);
+  align-items: start;
+  gap: 32px;
+}
+
+.theme-grid {
+  min-width: 0;
+  margin-top: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.theme-option {
+  min-width: 0;
+  min-height: 68px;
+  padding: 10px;
+  gap: 10px;
+}
+
+.theme-option-copy {
+  min-width: 0;
+}
+
+.theme-option-copy strong,
+.theme-option-copy span {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@media (max-width: 760px) {
+  .theme-settings {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .theme-grid {
+    grid-template-columns: 1fr;
+  }
+}

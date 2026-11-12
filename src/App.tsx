@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Heart, Home, Music2, Pause, Play, Search, Settings, SkipBack, SkipForward, Upload, Volume2, X } from 'lucide-react'
 import { spotifyBridge, hasSpotifyBridge } from './spotifyBridge'
 import './App.css'
+import './Theme.css'
 
 type Platform = 'Spotify' | 'VK Музыка' | 'Яндекс Музыка'
 type Theme = 'default' | 'black' | 'forest' | 'ocean' | 'burgundy' | 'purple'
