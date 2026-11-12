@@ -182,12 +182,7 @@ ipcMain.handle('spotify-disconnect', () => { store.delete('spotify-tokens') })
 
 app.whenReady().then(async () => {
   void store
-  try {
-    await components.whenReady()
-    console.log('Widevine components ready', components.status())
-  } catch (error) {
-    console.error('Widevine components failed', error)
-  }
+  void components.whenReady().then(() => console.log('Electron components ready', components.status())).catch(error => console.error('Electron components failed', error))
   const server = await createEdgeServer()
   if (!server) {
     openEdge()
