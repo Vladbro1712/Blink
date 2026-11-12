@@ -324,7 +324,7 @@ function App() {
       return
     }
     try {
-      await spotifyBridge.api(`/me/tracks?ids=${encodeURIComponent(spotifyId)}`, { method: alreadyFavorite ? 'DELETE' : 'PUT' })
+      await spotifyBridge.api(`/me/library?uris=${encodeURIComponent(track.uri || `spotify:track:${spotifyId}`)}`, { method: alreadyFavorite ? 'DELETE' : 'PUT' })
       setSpotifyFavorites(items => alreadyFavorite ? items.filter(item => item.uri !== track.uri) : [...items, track])
       setSpotifyFavoritesRefresh(value => value + 1)
     } catch (error) {
