@@ -4,6 +4,15 @@ import { spotifyBridge, hasSpotifyBridge } from './spotifyBridge'
 import './App.css'
 
 type Platform = 'Spotify' | 'VK Музыка' | 'Яндекс Музыка'
+type Theme = 'default' | 'black' | 'forest' | 'ocean' | 'burgundy' | 'purple'
+const themes: Array<{ id: Theme; name: string; description: string; color: string }> = [
+  { id: 'default', name: 'Основная', description: 'Тёплая светлая тема', color: '#f8f7f4' },
+  { id: 'black', name: 'Чёрная', description: 'Глубокий графит', color: '#171817' },
+  { id: 'forest', name: 'Зелёная', description: 'Цвета хвойного леса', color: '#18352d' },
+  { id: 'ocean', name: 'Синяя', description: 'Цвета морской волны', color: '#123b4a' },
+  { id: 'burgundy', name: 'Красная', description: 'Тёмный бургунди', color: '#461d2c' },
+  { id: 'purple', name: 'Тёмно-фиолетовая', description: 'Глубокий фиолетовый', color: '#281d3d' },
+]
 type Track = { title: string; artist: string; cover: string; color: string; duration: string; src?: string; fileId?: string; image?: string; externalUrl?: string; uri?: string }
 type SpotifyProfile = { display_name?: string | null; email?: string }
 type SpotifyPlaybackState = { paused: boolean; position: number; duration: number; track_window?: { current_track?: { id: string; uri: string; name: string; duration_ms?: number; artists: Array<{ name: string }>; album: { images: Array<{ url: string }> } } } }
@@ -90,6 +99,7 @@ const hydrateCoverImages = async (items: Track[]) => Promise.all(items.map(async
 
 function App() {
   const [chosen, setChosen] = useState<Platform>(() => (localStorage.getItem('blink-platform') as Platform) || 'Spotify')
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('blink-theme') as Theme) || 'default')
   const [screen, setScreen] = useState<'home' | 'favorites' | 'library' | 'settings'>('home')
   const [query, setQuery] = useState('')
   const [remember, setRemember] = useState(() => localStorage.getItem('blink-remember') !== 'false')
@@ -136,6 +146,7 @@ function App() {
   const localTrackIds = useMemo(() => new Set(localTracks.map(t => t.fileId)), [localTracks])
   const filtered = useMemo(() => [...allTracks, ...spotifyTracks].filter(t => `${t.title} ${t.artist}`.toLowerCase().includes(query.toLowerCase())), [allTracks, query, spotifyTracks])
   useEffect(() => { if (remember) localStorage.setItem('blink-platform', chosen) }, [chosen, remember])
+  useEffect(() => { localStorage.setItem('blink-theme', theme) }, [theme])
   useEffect(() => { localStorage.setItem('blink-favorites', JSON.stringify(favoriteIds)) }, [favoriteIds])
   useEffect(() => { void openLibrary().then(db => { const request = db.transaction('audio').objectStore('audio').getAll(); request.onsuccess = () => setLocalTracks((request.result as Array<Track & { blob: Blob }>).map(({ blob, ...track }) => ({ ...track, src: URL.createObjectURL(blob) }))) }) }, [])
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume / 100 }, [volume])
@@ -366,7 +377,7 @@ function App() {
   }
   const displayed = screen === 'favorites' ? favoriteTracks : screen === 'library' ? filtered.filter(t => t.fileId && !t.externalUrl) : filtered
 
-  return <main className="app">
+  return <main className={`app theme-${theme}`}>
     <aside className="sidebar">
       <button className="brand" onClick={() => setScreen('home')} aria-label="Blink — на главную"><span className="brand-mark"><Music2 size={19}/></span><span>blink<span className="brand-period">.</span></span></button>
       <div className="side-caption">МЕНЮ</div>
@@ -382,7 +393,7 @@ function App() {
 
     <section className="main-column">
       <header className="topbar"><div className="search-box"><Search size={17}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Треки, исполнители, альбомы"/><kbd>⌘ K</kbd>{query && <button className="clear-search" onClick={() => setQuery('')}><X size={15}/></button>}</div><button className="connect-button" onClick={() => setShowPicker(true)}><span className="connect-pulse"/> {chosen}</button></header>
-      {screen === 'settings' ? <div className="content settings-content"><div className="eyebrow">МУЗЫКАЛЬНЫЕ СЕРВИСЫ</div><h1>Настройки</h1><p className="page-description">Управление музыкальными площадками и аккаунтами.</p><section className="settings-section"><div><h3>Музыкальные площадки</h3><p>Подключённые сервисы и аккаунты</p></div><button className="outline-button" onClick={() => setShowPicker(true)}>Настроить площадки</button></section></div> : <div className="content">
+      {screen === 'settings' ? <div className="content settings-content"><div className="eyebrow">МУЗЫКАЛЬНЫЕ СЕРВИСЫ</div><h1>Настройки</h1><p className="page-description">Управление музыкальными площадками и аккаунтами.</p><section className="settings-section"><div><h3>Музыкальные площадки</h3><p>Подключённые сервисы и аккаунты</p></div><button className="outline-button" onClick={() => setShowPicker(true)}>Настроить площадки</button></section><section className="settings-section theme-settings"><div><h3>Тема оформления</h3><p>Выберите цветовую палитру Blink</p></div><div className="theme-grid">{themes.map(option => <button key={option.id} className={theme === option.id ? 'theme-option selected' : 'theme-option'} onClick={() => setTheme(option.id)}><span className="theme-swatch" style={{ background: option.color }}/><span className="theme-option-copy"><strong>{option.name}</strong><span>{option.description}</span></span><span className="theme-check" aria-hidden="true">{theme === option.id ? '✓' : ''}</span></button>)}</div></section></div> : <div className="content">
         {screen === 'home' || screen === 'library' ? <><div className="eyebrow">{screen === 'library' ? 'ВАША МУЗЫКА' : <>ПОДБРАНО ДЛЯ ВАС <span className="eyebrow-dot"/> {chosen.toUpperCase()}</>}</div><div className="welcome-row"><div><h1>{screen === 'library' ? <>Все треки<span>.</span></> : <>Чувствуй <span>момент.</span></>}</h1><p className="page-description">{screen === 'library' ? 'Ваша музыка с компьютера.' : 'Ваша музыка. Ваш ритм. Ваш Blink.'}</p></div>{screen === 'home' && <button className="date-label">ПОНЕДЕЛЬНИК, 10 НОЯБРЯ</button>}</div>
           {screen === 'home' && <section className="hero-feature" style={{backgroundImage:`linear-gradient(90deg,rgba(26,27,23,.72),rgba(30,29,24,.1)),url("${photo('photo-1470252649378-9c29740c9fa8')}")`}}><div className="hero-copy"><div className="hero-tag"><span/> ВЫБОР ДНЯ</div><h2>Найди свой<br/>тихий ритм.</h2><p>Музыка для моментов, когда хочется<br/>замедлиться и просто быть.</p><button className="hero-play" onClick={() => playTrack(tracks[0])}><Play size={15} fill="currentColor"/> Слушать подборку</button></div></section>}
           <section className="music-section"><div className="section-heading"><div><h2>{screen === 'library' ? 'Моя музыка' : 'Возможно, вам понравится'}</h2><p>{screen === 'library' ? `${localTracks.length} треков на этом устройстве` : 'Подборка и музыка с компьютера'}</p></div><button className="text-link import-link" onClick={() => fileInputRef.current?.click()}><Upload size={14}/> Добавить музыку</button><input ref={fileInputRef} className="visually-hidden" type="file" accept="audio/*" multiple onChange={event => { importFiles(event.target.files); event.target.value = '' }}/></div><div className="track-grid">{displayed.slice(0,screen === 'library' ? undefined : 6).map((track,i)=><article className="track-card" key={track.fileId || track.title}><div className="cover-wrap" style={{backgroundColor:track.color}}><img src={track.image || photo(track.cover)} alt="" loading="lazy"/><button className="cover-play" onClick={() => playTrack(track)} aria-label={`Играть ${track.title}`}><Play size={18} fill="currentColor"/></button><button className={favoriteIds.includes(track.fileId || track.title)?'track-heart liked':'track-heart'} onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Добавить в любимые"><Heart size={16} fill={favoriteIds.includes(track.fileId || track.title)?'currentColor':'none'}/></button><span className="track-index">0{i+1}</span></div><div className="track-details"><div><strong>{track.title}</strong><span>{track.artist}</span></div><button className="track-more" onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Добавить или убрать из любимых"><Heart size={15} fill={favoriteIds.includes(track.fileId || track.title)?'currentColor':'none'}/></button></div></article>)}</div>{spotifyProfile && <span className="spotify-profile">{spotifyProfile.display_name || spotifyProfile.email || 'Spotify подключён'}</span>}{spotifyError && <div className="empty-state">{spotifyError}</div>}</section>
