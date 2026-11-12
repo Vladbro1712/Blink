@@ -25,7 +25,11 @@ const edgeBridge: SpotifyBridge = {
       headers: options?.body ? { 'Content-Type': 'application/json' } : undefined,
       body: options?.body ? JSON.stringify(options.body) : undefined,
     })
-    if (!response.ok) throw new Error(await response.text())
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: unknown } | null
+      const detail = typeof payload?.error === 'string' ? payload.error : JSON.stringify(payload?.error ?? payload ?? null)
+      throw new Error(`Spotify API request failed (${response.status})${detail ? `: ${detail}` : ''}`)
+    }
     if (response.status === 204) return null
     return response.json()
   },

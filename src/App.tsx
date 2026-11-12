@@ -310,7 +310,7 @@ function App() {
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
           await spotifyBridge.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
-          await new Promise(resolve => window.setTimeout(resolve, 150))
+          await new Promise(resolve => window.setTimeout(resolve, 500))
           await spotifyBridge.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
           lastError = undefined
           break
