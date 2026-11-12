@@ -7,6 +7,12 @@ import { execFile } from 'node:child_process'
 import Store from 'electron-store'
 
 const store = new Store()
+let edgeServer = null
+let edgeProcess = null
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) app.quit()
+
+app.on('second-instance', () => { openEdge() })
 const spotifyClientId = '1720e78833f940348f746d417be3b00c'
 const spotifyRedirectUri = 'http://127.0.0.1:43821/callback'
 
@@ -120,7 +126,16 @@ function createEdgeServer() {
       response.writeHead(200, { 'Content-Type': contentTypes[filePath.slice(filePath.lastIndexOf('.'))] || 'application/octet-stream' }).end(content)
     } catch (error) { sendJson(500, { error: error instanceof Error ? error.message : String(error) }) }
   })
-  return new Promise(resolve => server.listen(43820, '127.0.0.1', () => resolve(server)))
+  return new Promise((resolve, reject) => {
+    server.once('error', error => {
+      if (error.code === 'EADDRINUSE') {
+        resolve(null)
+        return
+      }
+      reject(error)
+    })
+    server.listen(43820, '127.0.0.1', () => { edgeServer = server; resolve(server) })
+  })
 }
 
 function openEdge() {
@@ -131,7 +146,7 @@ function openEdge() {
   ]
   const edge = candidates.find(candidate => existsSync(candidate)) || 'msedge.exe'
   const profile = join(app.getPath('userData'), 'edge-profile')
-  execFile(edge, [`--app=http://127.0.0.1:43820/`, `--user-data-dir=${profile}`, '--no-first-run'], error => { if (error) console.error('Failed to open Microsoft Edge', error) })
+  edgeProcess = execFile(edge, [`--app=http://127.0.0.1:43820/`, `--user-data-dir=${profile}`, '--no-first-run'], error => { if (error) console.error('Failed to open Microsoft Edge', error) })
 }
 
 ipcMain.handle('spotify-status', () => Boolean(readTokens()))
@@ -173,11 +188,14 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error('Widevine components failed', error)
   }
-  await createEdgeServer()
+  const server = await createEdgeServer()
+  if (!server) {
+    openEdge()
+    return
+  }
   openEdge()
   app.on('activate', () => openEdge())
 })
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+app.on('before-quit', () => { edgeServer?.close(); edgeProcess?.kill() })
+app.on('window-all-closed', () => { app.quit() })
