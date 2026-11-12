@@ -68,15 +68,12 @@ function App() {
   const [spotifyProfile, setSpotifyProfile] = useState<SpotifyProfile | null>(null)
   const [spotifyTracks, setSpotifyTracks] = useState<Track[]>([])
   const [spotifyError, setSpotifyError] = useState('')
-  const [spotifyTrackLoading, setSpotifyTrackLoading] = useState(false)
   const [spotifyPlayer, setSpotifyPlayer] = useState<SpotifyPlayer | null>(null)
   const [spotifyReady, setSpotifyReady] = useState(false)
   const [spotifySdkReady, setSpotifySdkReady] = useState(() => Boolean(window.Spotify))
   const spotifyDeviceIdRef = useRef('')
   const spotifyReconnectTimerRef = useRef<number | null>(null)
   const spotifyReconnectAttemptRef = useRef(0)
-  const spotifyReadyTimerRef = useRef<number | null>(null)
-  const spotifyConnectRef = useRef<(() => void) | null>(null)
   const spotifyRecoveryTrackRef = useRef<Track | null>(null)
   const spotifyRecoveryRetryRef = useRef(0)
   const currentTrackRef = useRef(current)
@@ -99,34 +96,11 @@ function App() {
     script.src = spotifySdkUrl
     script.async = true
     script.onerror = () => setSpotifyError('Не удалось загрузить Web Playback SDK Spotify')
-    document.head.appendChild(script)
+    document.body.appendChild(script)
     return () => { window.onSpotifyWebPlaybackSDKReady = previousReady; script.remove() }
   }, [])
-  useEffect(() => {
-    const link = document.createElement('link')
-    link.rel = 'preconnect'
-    link.href = 'https://sdk.scdn.co'
-    document.head.appendChild(link)
-    return () => link.remove()
-  }, [])
-  useEffect(() => {
-    if (!query.trim() || !spotifyConnected || !hasSpotifyBridge || chosen !== 'Spotify') { setSpotifyTracks([]); setSpotifyError(''); return }
-    setSpotifyError('')
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      void spotifyBridge.api(`/search?${new URLSearchParams({ q: query, type: 'track', limit: '10', market: spotifyMarket })}`).then(response => {
-        if (controller.signal.aborted) return
-        const data = response as SpotifySearchResponse
-        setSpotifyTracks((data.tracks?.items || []).map(item => ({ title: item.name, artist: item.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(item.duration_ms / 1000), image: item.album.images[0]?.url, externalUrl: item.external_urls.spotify, uri: `spotify:track:${item.id}`, fileId: `spotify-${item.id}` })))
-      }).catch(error => {
-        if (controller.signal.aborted) return
-        console.error(error)
-        const detail = error instanceof Error ? error.message.replace(/^Error: /, '') : String(error)
-        setSpotifyError(`Не удалось выполнить поиск Spotify: ${detail}`)
-      })
-    }, 250)
-    return () => { window.clearTimeout(timer); controller.abort() }
-  }, [chosen, query, spotifyConnected])
+  useEffect(() => { if (!audioRef.current || current.uri) return; if (playing) void audioRef.current.play().catch(() => setPlaying(false)); else audioRef.current.pause() }, [current, playing])
+  useEffect(() => { if (!query.trim() || !spotifyConnected || !hasSpotifyBridge || chosen !== 'Spotify') { setSpotifyTracks([]); setSpotifyError(''); return } setSpotifyError(''); const timer = window.setTimeout(() => { void spotifyBridge.api(`/search?${new URLSearchParams({ q: query, type: 'track', limit: '10', market: spotifyMarket })}`).then(response => { const data = response as SpotifySearchResponse; setSpotifyTracks((data.tracks?.items || []).map(item => ({ title: item.name, artist: item.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime(item.duration_ms / 1000), image: item.album.images[0]?.url, externalUrl: item.external_urls.spotify, uri: `spotify:track:${item.id}`, fileId: `spotify-${item.id}` }))) }).catch(error => { console.error(error); const detail = error instanceof Error ? error.message.replace(/^Error: /, '') : String(error); setSpotifyError(`Не удалось выполнить поиск Spotify: ${detail}`) }) }, 350); return () => window.clearTimeout(timer) }, [chosen, query, spotifyConnected])
   useEffect(() => {
     if (!spotifyConnected || !spotifySdkReady || !hasSpotifyBridge || !window.Spotify) return
     const player = new window.Spotify.Player({
@@ -136,8 +110,6 @@ function App() {
       enableMediaSession: true,
     })
     player.addListener('ready', ({ device_id }: { device_id: string }) => {
-      if (spotifyReadyTimerRef.current !== null) window.clearTimeout(spotifyReadyTimerRef.current)
-      spotifyReadyTimerRef.current = null
       spotifyDeviceIdRef.current = device_id
       spotifyReconnectAttemptRef.current = 0
       setSpotifyReady(true)
@@ -152,7 +124,17 @@ function App() {
       if (!device_id || device_id === spotifyDeviceIdRef.current) spotifyDeviceIdRef.current = ''
       setSpotifyReady(false)
       setSpotifyError('Spotify временно потерял аудиоустройство. Восстанавливаем подключение…')
-      if (spotifyReconnectTimerRef.current === null) spotifyReconnectTimerRef.current = window.setTimeout(() => { spotifyConnectRef.current?.() }, 1000)
+      if (spotifyReconnectTimerRef.current === null) {
+        const reconnect = () => {
+          spotifyReconnectTimerRef.current = null
+          if (spotifyReconnectAttemptRef.current >= 5) return
+          spotifyReconnectAttemptRef.current += 1
+          void player.connect().then(connected => {
+            if (!connected) reconnect()
+          }).catch(() => reconnect())
+        }
+        spotifyReconnectTimerRef.current = window.setTimeout(reconnect, 1000)
+      }
     })
     player.addListener('authentication_error', ({ message }: { message: string }) => setSpotifyError(`Spotify: ${message}`))
     player.addListener('account_error', ({ message }: { message: string }) => setSpotifyError(`Spotify Premium нужен для воспроизведения: ${message}`))
@@ -176,31 +158,11 @@ function App() {
       const track = state.track_window?.current_track
       if (track && track.id) setCurrent({ title: track.name, artist: track.artists.map(artist => artist.name).join(', '), cover: tracks[0].cover, color: '#77786e', duration: formatTime((track.duration_ms || state.duration) / 1000), image: track.album.images[0]?.url, externalUrl: `https://open.spotify.com/track/${track.id}`, uri: track.uri, fileId: `spotify-${track.id}` })
     })
-    const connectPlayer = () => {
-      spotifyReconnectTimerRef.current = null
-      if (spotifyReady || spotifyReconnectAttemptRef.current >= 6) return
-      spotifyReconnectAttemptRef.current += 1
-      void player.connect().then(connected => {
-        if (connected) return
-        setSpotifyError(`Spotify-плеер не подключился (попытка ${spotifyReconnectAttemptRef.current}/6).`)
-        spotifyReconnectTimerRef.current = window.setTimeout(connectPlayer, 1500)
-      }).catch(error => {
-        const detail = error instanceof Error ? error.message : String(error)
-        setSpotifyError(`Не удалось подключить Spotify-плеер: ${detail}`)
-        spotifyReconnectTimerRef.current = window.setTimeout(connectPlayer, 1500)
-      })
-    }
-    connectPlayer()
-    spotifyConnectRef.current = connectPlayer
-    spotifyReadyTimerRef.current = window.setTimeout(() => {
-      if (!spotifyDeviceIdRef.current) setSpotifyError('Spotify SDK не зарегистрировал устройство в Edge. Проверьте Premium-аккаунт и разрешение воспроизведения.')
-    }, 10000)
+    setSpotifyPlayer(player)
+    void player.connect().then(connected => { if (!connected) setSpotifyError('Не удалось подключить Web Playback SDK') })
     return () => {
       if (spotifyReconnectTimerRef.current !== null) window.clearTimeout(spotifyReconnectTimerRef.current)
-      if (spotifyReadyTimerRef.current !== null) window.clearTimeout(spotifyReadyTimerRef.current)
       spotifyReconnectTimerRef.current = null
-      spotifyReadyTimerRef.current = null
-      spotifyConnectRef.current = null
       player.disconnect()
       setSpotifyPlayer(null)
       setSpotifyReady(false)
@@ -259,28 +221,29 @@ function App() {
       spotifyRecoveryRetryRef.current = 0
       spotifyRecoveryTrackRef.current = null
     }
-    if (!spotifyPlayer || !spotifyReady || !spotifyDeviceIdRef.current) { setSpotifyError('Spotify-плеер Blink ещё не готов. Дождитесь подключения устройства.'); return }
-    setSpotifyTrackLoading(true)
-    setSpotifyError('')
+    if (!spotifyPlayer || !spotifyReady || !spotifyDeviceIdRef.current) { setSpotifyError('Spotify-плеер Blink ещё не готов. Перезапустите Blink и дождитесь подключения устройства.'); return }
     try {
       await spotifyPlayer.activateElement()
       const deviceId = spotifyDeviceIdRef.current
-      try {
-        await spotifyBridge.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
-      } catch (firstError) {
-        const detail = firstError instanceof Error ? firstError.message : String(firstError)
-        if (!detail.includes('(404)')) throw firstError
-        await spotifyBridge.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
-        await new Promise(resolve => window.setTimeout(resolve, 250))
-        await spotifyBridge.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
+      let lastError: unknown
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          await spotifyBridge.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
+          await new Promise(resolve => window.setTimeout(resolve, 500))
+          await spotifyBridge.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
+          lastError = undefined
+          break
+        } catch (error) {
+          lastError = error
+          await new Promise(resolve => window.setTimeout(resolve, 1000))
+        }
       }
+      if (lastError) throw lastError
       await waitForSpotifyPlayback(deviceId)
       setCurrent(track)
       setPlaying(true)
     } catch (error) {
       spotifyPlaybackError(error)
-    } finally {
-      setSpotifyTrackLoading(false)
     }
   }
   const togglePlayback = () => { if (current.uri && spotifyPlayer && spotifyReady) { void spotifyPlayer.togglePlay().catch(spotifyPlaybackError); return } if (current.src) setPlaying(value => !value); else fileInputRef.current?.click() }
@@ -332,12 +295,12 @@ function App() {
       {screen === 'settings' ? <div className="content settings-content"><div className="eyebrow">МУЗЫКАЛЬНЫЕ СЕРВИСЫ</div><h1>Настройки</h1><p className="page-description">Управление музыкальными площадками и аккаунтами.</p><section className="settings-section"><div><h3>Музыкальные площадки</h3><p>Подключённые сервисы и аккаунты</p></div><button className="outline-button" onClick={() => setShowPicker(true)}>Настроить площадки</button></section></div> : <div className="content">
         {screen === 'home' || screen === 'library' ? <><div className="eyebrow">{screen === 'library' ? 'ВАША МУЗЫКА' : <>ПОДБРАНО ДЛЯ ВАС <span className="eyebrow-dot"/> {chosen.toUpperCase()}</>}</div><div className="welcome-row"><div><h1>{screen === 'library' ? <>Все треки<span>.</span></> : <>Чувствуй <span>момент.</span></>}</h1><p className="page-description">{screen === 'library' ? 'Ваша музыка с компьютера.' : 'Ваша музыка. Ваш ритм. Ваш Blink.'}</p></div>{screen === 'home' && <button className="date-label">ПОНЕДЕЛЬНИК, 10 НОЯБРЯ</button>}</div>
           {screen === 'home' && <section className="hero-feature" style={{backgroundImage:`linear-gradient(90deg,rgba(26,27,23,.72),rgba(30,29,24,.1)),url("${photo('photo-1470252649378-9c29740c9fa8')}")`}}><div className="hero-copy"><div className="hero-tag"><span/> ВЫБОР ДНЯ</div><h2>Найди свой<br/>тихий ритм.</h2><p>Музыка для моментов, когда хочется<br/>замедлиться и просто быть.</p><button className="hero-play" onClick={() => playTrack(tracks[0])}><Play size={15} fill="currentColor"/> Слушать подборку</button></div></section>}
-          <section className="music-section"><div className="section-heading"><div><h2>{screen === 'library' ? 'Моя музыка' : 'Возможно, вам понравится'}</h2><p>{screen === 'library' ? `${localTracks.length} треков на этом устройстве` : 'Подборка и музыка с компьютера'}</p></div><button className="text-link import-link" onClick={() => fileInputRef.current?.click()}><Upload size={14}/> Добавить музыку</button><input ref={fileInputRef} className="visually-hidden" type="file" accept="audio/*" multiple onChange={event => { importFiles(event.target.files); event.target.value = '' }}/></div><div className="track-grid">{displayed.slice(0,screen === 'library' ? undefined : 6).map((track,i)=><article className="track-card" key={track.fileId || track.title}><div className="cover-wrap" style={{backgroundColor:track.color}}><img src={track.image || photo(track.cover)} alt="" loading="lazy"/><button className="cover-play" onClick={() => playTrack(track)} aria-label={`Играть ${track.title}`}>{spotifyTrackLoading && current.uri === track.uri ? <span className="loading-dot"/> : <Play size={18} fill="currentColor"/>}</button><button className={favoriteIds.includes(track.fileId || track.title)?'track-heart liked':'track-heart'} onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Добавить в любимые"><Heart size={16} fill={favoriteIds.includes(track.fileId || track.title)?'currentColor':'none'}/></button><span className="track-index">0{i+1}</span></div><div className="track-details"><div><strong>{track.title}</strong><span>{track.artist}</span></div><button className="track-more" onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Добавить или убрать из любимых"><Heart size={15} fill={favoriteIds.includes(track.fileId || track.title)?'currentColor':'none'}/></button></div></article>)}</div>{spotifyProfile && <span className="spotify-profile">{spotifyProfile.display_name || spotifyProfile.email || 'Spotify подключён'}</span>}{spotifyError && <div className="empty-state">{spotifyError}</div>}</section>
-        </> : screen === 'favorites' && <><div className="eyebrow">ВАША КОЛЛЕКЦИЯ <span className="eyebrow-dot"/> {chosen.toUpperCase()}</div><div className="welcome-row"><div><h1>Любимые<span>.</span></h1><p className="page-description">Всё, что хочется переслушать.</p></div></div><div className="favorite-banner"><Heart size={30}/><div><strong>{favoriteIds.length} трека</strong><span>из вашей коллекции {chosen}</span></div></div><section className="music-section"><div className="section-heading"><div><h2>Сохранённое</h2><p>Ваша личная подборка</p></div></div><div className="track-grid">{displayed.map((track,i)=><article className="track-card" key={track.title}><div className="cover-wrap" style={{backgroundColor:track.color}}><img src={track.image || photo(track.cover)} alt="" loading="lazy"/><button className="cover-play" onClick={() => playTrack(track)} aria-label={`Играть ${track.title}`}>{spotifyTrackLoading && current.uri === track.uri ? <span className="loading-dot"/> : <Play size={18} fill="currentColor"/>}</button><button className="track-heart liked" onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Убрать из любимых"><Heart size={16} fill="currentColor"/></button><span className="track-index">0{i+1}</span></div><div className="track-details"><div><strong>{track.title}</strong><span>{track.artist}</span></div></div></article>)}</div>{displayed.length === 0 && <div className="empty-state">Здесь пока пусто. Добавляйте треки в любимые на главной.</div>}</section></>}
+          <section className="music-section"><div className="section-heading"><div><h2>{screen === 'library' ? 'Моя музыка' : 'Возможно, вам понравится'}</h2><p>{screen === 'library' ? `${localTracks.length} треков на этом устройстве` : 'Подборка и музыка с компьютера'}</p></div><button className="text-link import-link" onClick={() => fileInputRef.current?.click()}><Upload size={14}/> Добавить музыку</button><input ref={fileInputRef} className="visually-hidden" type="file" accept="audio/*" multiple onChange={event => { importFiles(event.target.files); event.target.value = '' }}/></div><div className="track-grid">{displayed.slice(0,screen === 'library' ? undefined : 6).map((track,i)=><article className="track-card" key={track.fileId || track.title}><div className="cover-wrap" style={{backgroundColor:track.color}}><img src={track.image || photo(track.cover)} alt="" loading="lazy"/><button className="cover-play" onClick={() => playTrack(track)} aria-label={`Играть ${track.title}`}><Play size={18} fill="currentColor"/></button><button className={favoriteIds.includes(track.fileId || track.title)?'track-heart liked':'track-heart'} onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Добавить в любимые"><Heart size={16} fill={favoriteIds.includes(track.fileId || track.title)?'currentColor':'none'}/></button><span className="track-index">0{i+1}</span></div><div className="track-details"><div><strong>{track.title}</strong><span>{track.artist}</span></div><button className="track-more" onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Добавить или убрать из любимых"><Heart size={15} fill={favoriteIds.includes(track.fileId || track.title)?'currentColor':'none'}/></button></div></article>)}</div>{spotifyProfile && <span className="spotify-profile">{spotifyProfile.display_name || spotifyProfile.email || 'Spotify подключён'}</span>}{spotifyError && <div className="empty-state">{spotifyError}</div>}</section>
+        </> : screen === 'favorites' && <><div className="eyebrow">ВАША КОЛЛЕКЦИЯ <span className="eyebrow-dot"/> {chosen.toUpperCase()}</div><div className="welcome-row"><div><h1>Любимые<span>.</span></h1><p className="page-description">Всё, что хочется переслушать.</p></div></div><div className="favorite-banner"><Heart size={30}/><div><strong>{favoriteIds.length} трека</strong><span>из вашей коллекции {chosen}</span></div></div><section className="music-section"><div className="section-heading"><div><h2>Сохранённое</h2><p>Ваша личная подборка</p></div></div><div className="track-grid">{displayed.map((track,i)=><article className="track-card" key={track.title}><div className="cover-wrap" style={{backgroundColor:track.color}}><img src={track.image || photo(track.cover)} alt="" loading="lazy"/><button className="cover-play" onClick={() => playTrack(track)} aria-label={`Играть ${track.title}`}><Play size={18} fill="currentColor"/></button><button className="track-heart liked" onClick={() => toggleFavorite(track.fileId || track.title)} aria-label="Убрать из любимых"><Heart size={16} fill="currentColor"/></button><span className="track-index">0{i+1}</span></div><div className="track-details"><div><strong>{track.title}</strong><span>{track.artist}</span></div></div></article>)}</div>{displayed.length === 0 && <div className="empty-state">Здесь пока пусто. Добавляйте треки в любимые на главной.</div>}</section></>}
       </div>}
       <footer className="footer"><span>BLINK <span className="footer-dot">●</span> ВАША МУЗЫКА, ВАШИ ПРАВИЛА</span><span>СДЕЛАНО ДЛЯ МУЗЫКИ <Music2 size={12}/></span></footer>
     </section>
-    <footer className="player"><audio ref={audioRef} src={current.src} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onLoadedMetadata={event => { const seconds = event.currentTarget.duration; if (Number.isFinite(seconds)) { setDuration(seconds); setCurrent(track => track.src === current.src ? { ...track, duration: formatTime(seconds) } : track) } }} onEnded={() => stepTrack(1)}/><div className="player-track"><img src={current.image || photo(current.cover)} alt=""/><div><strong>{current.title}</strong><span>{current.artist}</span></div><button className={favoriteIds.includes(current.fileId || current.title)?'player-heart liked':'player-heart'} onClick={() => toggleFavorite(current.fileId || current.title)} aria-label="В любимые"><Heart size={16} fill={favoriteIds.includes(current.title)?'currentColor':'none'}/></button></div><div className="player-controls"><div className="control-buttons"><button aria-label="Предыдущий трек" onClick={() => stepTrack(-1)}><SkipBack size={17} fill="currentColor"/></button><button className="main-play" aria-label={playing?'Пауза':'Играть'} onClick={togglePlayback}>{spotifyTrackLoading ? <span className="loading-dot"/> : playing?<Pause size={17} fill="currentColor"/>:<Play size={17} fill="currentColor"/>}</button><button aria-label="Следующий трек" onClick={() => stepTrack(1)}><SkipForward size={17} fill="currentColor"/></button></div><div className="timeline"><span>{formatTime(position)}</span><input className="seek-slider" type="range" min="0" max={duration} step="0.1" value={position} onChange={event => seekPlayback(Number(event.target.value))} aria-label="Позиция воспроизведения"/><span>{current.duration}</span></div></div><div className="player-volume"><Volume2 size={16}/><input type="range" min="0" max="100" value={volume} onChange={e => setVolume(Number(e.target.value))} aria-label="Громкость"/></div></footer>
+    <footer className="player"><audio ref={audioRef} src={current.src} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onLoadedMetadata={event => { const seconds = event.currentTarget.duration; if (Number.isFinite(seconds)) { setDuration(seconds); setCurrent(track => track.src === current.src ? { ...track, duration: formatTime(seconds) } : track) } }} onEnded={() => stepTrack(1)}/><div className="player-track"><img src={current.image || photo(current.cover)} alt=""/><div><strong>{current.title}</strong><span>{current.artist}</span></div><button className={favoriteIds.includes(current.fileId || current.title)?'player-heart liked':'player-heart'} onClick={() => toggleFavorite(current.fileId || current.title)} aria-label="В любимые"><Heart size={16} fill={favoriteIds.includes(current.title)?'currentColor':'none'}/></button></div><div className="player-controls"><div className="control-buttons"><button aria-label="Предыдущий трек" onClick={() => stepTrack(-1)}><SkipBack size={17} fill="currentColor"/></button><button className="main-play" aria-label={playing?'Пауза':'Играть'} onClick={togglePlayback}>{playing?<Pause size={17} fill="currentColor"/>:<Play size={17} fill="currentColor"/>}</button><button aria-label="Следующий трек" onClick={() => stepTrack(1)}><SkipForward size={17} fill="currentColor"/></button></div><div className="timeline"><span>{formatTime(position)}</span><input className="seek-slider" type="range" min="0" max={duration} step="0.1" value={position} onChange={event => seekPlayback(Number(event.target.value))} aria-label="Позиция воспроизведения"/><span>{current.duration}</span></div></div><div className="player-volume"><Volume2 size={16}/><input type="range" min="0" max="100" value={volume} onChange={e => setVolume(Number(e.target.value))} aria-label="Громкость"/></div></footer>
     {showPicker && <div className="modal-backdrop" onClick={() => setShowPicker(false)}><section className="source-modal" onClick={e => e.stopPropagation()}><div className="modal-top"><span className="eyebrow">ВАША МУЗЫКА, В ОДНОМ МЕСТЕ</span><button className="modal-close" onClick={() => setShowPicker(false)} aria-label="Закрыть"><X size={19}/></button></div><h2>Откуда начнём?</h2><p className="modal-description">Выберите музыкальную площадку</p><div className="platform-list">{platforms.map((p,i)=><button className={chosen===p?'platform-option selected':'platform-option'} onClick={() => pickPlatform(p)} key={p}><span className={`platform-logo p${i}`}>{i===0?'◉':i===1?'ᴠ':'Я'}</span><span className="platform-name"><strong>{p}</strong><span>{i===0?'Музыка со всего мира':i===1?'Музыка и подкасты':'Музыка для каждого дня'}</span></span><span className="status-soon">{i === 0 ? (spotifyConnected ? 'Подключён' : 'Не подключён') : 'Скоро'}</span></button>)}</div><label className="remember-check"><input type="checkbox" checked={remember} onChange={e => {setRemember(e.target.checked);localStorage.setItem('blink-remember',String(e.target.checked))}}/><span className="checkmark"/><span>Запомнить мой выбор</span></label><button className="modal-continue" onClick={() => chosen === 'Spotify' && !spotifyConnected ? void connectSpotify() : setShowPicker(false)} disabled={spotifyBusy}>{spotifyBusy ? 'Открываем Spotify…' : chosen === 'Spotify' && !spotifyConnected ? 'Подключить Spotify' : 'Продолжить'} <span>→</span></button><p className="modal-note">{spotifyConnected ? 'Spotify подключён для этого устройства' : 'Для закрытого бета-теста используется OAuth PKCE · Client Secret не нужен'}</p>{spotifyConnected && <button className="text-link" onClick={() => void disconnectSpotify()}>Отключить Spotify</button>}</section></div>}
   </main>
 }
