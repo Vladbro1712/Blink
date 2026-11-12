@@ -153,19 +153,15 @@ function App() {
   }
   const toggleFavorite = (title: string) => setFavoriteIds(items => items.includes(title) ? items.filter(i => i !== title) : [...items, title])
   const spotifyPlaybackError = (error: unknown) => { const detail = error instanceof Error ? error.message : String(error); setSpotifyError(`Spotify не запустил трек: ${detail}`) }
-  const waitForSpotifyDevice = async (deviceId: string) => {
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      const response = await window.blink?.spotify.api('/me/player/devices') as { devices?: Array<{ id: string; is_active?: boolean }> } | null
-      if (response?.devices?.some(device => device.id === deviceId)) return
-      await new Promise(resolve => window.setTimeout(resolve, 500))
-    }
-    throw new Error('Устройство Blink ещё не появилось в Spotify Connect')
-  }
   const waitForSpotifyPlayback = async (deviceId: string) => {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await new Promise(resolve => window.setTimeout(resolve, 400))
-      const state = await window.blink?.spotify.api('/me/player') as { device?: { id?: string }; is_playing?: boolean; item?: { name?: string } } | null
-      if (state?.device?.id === deviceId && state.is_playing) return state
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await new Promise(resolve => window.setTimeout(resolve, 500))
+      try {
+        const state = await window.blink?.spotify.api('/me/player') as { device?: { id?: string }; is_playing?: boolean; item?: { name?: string } } | null
+        if (state?.device?.id === deviceId && state.is_playing) return state
+      } catch {
+        // The device can remain unavailable briefly while Spotify registers it.
+      }
     }
     throw new Error('Spotify не подтвердил начало воспроизведения. Проверьте активный Premium-сеанс и разрешение streaming.')
   }
@@ -174,10 +170,20 @@ function App() {
     try {
       await spotifyPlayer.activateElement()
       const deviceId = spotifyDeviceIdRef.current
-      await waitForSpotifyDevice(deviceId)
-      await window.blink?.spotify.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
-      await new Promise(resolve => window.setTimeout(resolve, 300))
-      await window.blink?.spotify.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
+      let lastError: unknown
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          await window.blink?.spotify.api('/me/player', { method: 'PUT', body: { device_ids: [deviceId], play: false } })
+          await new Promise(resolve => window.setTimeout(resolve, 500))
+          await window.blink?.spotify.api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, { method: 'PUT', body: { uris: [track.uri] } })
+          lastError = undefined
+          break
+        } catch (error) {
+          lastError = error
+          await new Promise(resolve => window.setTimeout(resolve, 1000))
+        }
+      }
+      if (lastError) throw lastError
       await waitForSpotifyPlayback(deviceId)
       setCurrent(track)
       setPlaying(true)
