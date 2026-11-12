@@ -374,6 +374,67 @@
   }
 }
 
+/* Keep every theme's controls tied to its own palette. */
+.app.theme-black {
+  --theme-bg: #101312;
+  --theme-surface: #1b211e;
+  --theme-surface-raised: #26312b;
+  --theme-text: #f5faf7;
+  --theme-text-soft: #d1e0d7;
+  --theme-muted: #acc2b5;
+  --theme-accent: #d5e8db;
+  --theme-border: #3b5045;
+  --theme-control: #304039;
+}
+
+.app.theme-forest {
+  --theme-bg: #09231b;
+  --theme-surface: #12382b;
+  --theme-surface-raised: #1d4c3a;
+  --theme-text: #f1fff6;
+  --theme-text-soft: #d8f0e2;
+  --theme-muted: #b6d7c3;
+  --theme-accent: #a9e3bd;
+  --theme-border: #3c6d56;
+  --theme-control: #285640;
+}
+
+.app.theme-ocean {
+  --theme-bg: #082832;
+  --theme-surface: #103f4d;
+  --theme-surface-raised: #1b5869;
+  --theme-text: #f2fcff;
+  --theme-text-soft: #d9f1f6;
+  --theme-muted: #b8d9e1;
+  --theme-accent: #a9e7f0;
+  --theme-border: #397080;
+  --theme-control: #245a68;
+}
+
+.app.theme-burgundy {
+  --theme-bg: #2a0d19;
+  --theme-surface: #481827;
+  --theme-surface-raised: #63263a;
+  --theme-text: #fff5f8;
+  --theme-text-soft: #f5dce4;
+  --theme-muted: #e1b9c7;
+  --theme-accent: #ffc1d4;
+  --theme-border: #81445a;
+  --theme-control: #672b40;
+}
+
+.app.theme-purple {
+  --theme-bg: #1b122d;
+  --theme-surface: #302047;
+  --theme-surface-raised: #473064;
+  --theme-text: #fbf7ff;
+  --theme-text-soft: #eadff8;
+  --theme-muted: #c9b8df;
+  --theme-accent: #e1c8ff;
+  --theme-border: #614b80;
+  --theme-control: #493265;
+}
+
 /* Theme-owned controls override the legacy base palette. */
 .app.theme-black,
 .app.theme-forest,
@@ -477,3 +538,10 @@
   color: var(--theme-text) !important;
   border-color: var(--theme-border) !important;
 }
+
+/* Final per-theme tokens must come after the shared control rules. */
+.app.theme-black { --theme-accent: #d5e8db; --theme-control: #304039; }
+.app.theme-forest { --theme-accent: #a9e3bd; --theme-control: #285640; }
+.app.theme-ocean { --theme-accent: #a9e7f0; --theme-control: #245a68; }
+.app.theme-burgundy { --theme-accent: #ffc1d4; --theme-control: #672b40; }
+.app.theme-purple { --theme-accent: #e1c8ff; --theme-control: #493265; }
