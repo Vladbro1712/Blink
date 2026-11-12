@@ -10,6 +10,7 @@ type SpotifyPlayer = {
   addListener: (event: string, callback: (payload: any) => void) => boolean
   connect: () => Promise<boolean>
   disconnect: () => void
+  getCurrentState?: () => Promise<SpotifyPlaybackState | null>
   activateElement: () => Promise<void>
   togglePlay: () => Promise<void>
   seek: (positionMs: number) => Promise<void>
@@ -69,6 +70,12 @@ function App() {
   const [spotifyReady, setSpotifyReady] = useState(false)
   const [spotifySdkReady, setSpotifySdkReady] = useState(() => Boolean(window.Spotify))
   const spotifyDeviceIdRef = useRef('')
+  const spotifyReconnectTimerRef = useRef<number | null>(null)
+  const spotifyReconnectAttemptRef = useRef(0)
+  const spotifyRecoveryTrackRef = useRef<Track | null>(null)
+  const spotifyRecoveryRetryRef = useRef(0)
+  const currentTrackRef = useRef(current)
+  currentTrackRef.current = current
   const audioRef = useRef<HTMLAudioElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const allTracks = useMemo(() => [...tracks, ...localTracks], [localTracks])
@@ -100,12 +107,47 @@ function App() {
       volume: 0.7,
       enableMediaSession: true,
     })
-    player.addListener('ready', ({ device_id }: { device_id: string }) => { spotifyDeviceIdRef.current = device_id; setSpotifyReady(true) })
-    player.addListener('not_ready', () => setSpotifyReady(false))
+    player.addListener('ready', ({ device_id }: { device_id: string }) => {
+      spotifyDeviceIdRef.current = device_id
+      spotifyReconnectAttemptRef.current = 0
+      setSpotifyReady(true)
+      const recoveryTrack = spotifyRecoveryTrackRef.current
+      spotifyRecoveryTrackRef.current = null
+      if (recoveryTrack && spotifyRecoveryRetryRef.current < 1) {
+        spotifyRecoveryRetryRef.current += 1
+        void startSpotifyTrack(recoveryTrack, true)
+      }
+    })
+    player.addListener('not_ready', ({ device_id }: { device_id?: string } = {}) => {
+      if (!device_id || device_id === spotifyDeviceIdRef.current) spotifyDeviceIdRef.current = ''
+      setSpotifyReady(false)
+      setSpotifyError('Spotify временно потерял аудиоустройство. Восстанавливаем подключение…')
+      if (spotifyReconnectTimerRef.current === null) {
+        const reconnect = () => {
+          spotifyReconnectTimerRef.current = null
+          if (spotifyReconnectAttemptRef.current >= 5) return
+          spotifyReconnectAttemptRef.current += 1
+          void player.connect().then(connected => {
+            if (!connected) reconnect()
+          }).catch(() => reconnect())
+        }
+        spotifyReconnectTimerRef.current = window.setTimeout(reconnect, 1000)
+      }
+    })
     player.addListener('authentication_error', ({ message }: { message: string }) => setSpotifyError(`Spotify: ${message}`))
     player.addListener('account_error', ({ message }: { message: string }) => setSpotifyError(`Spotify Premium нужен для воспроизведения: ${message}`))
     player.addListener('initialization_error', ({ message }: { message: string }) => setSpotifyError(`Web Playback SDK: ${message}`))
-    player.addListener('playback_error', ({ message }: { message: string }) => setSpotifyError(`Spotify: ${message}`))
+    player.addListener('playback_error', (payload: { message?: string; [key: string]: unknown }) => {
+      const detail = payload?.message || JSON.stringify(payload)
+      setPlaying(false)
+      setSpotifyError(`Spotify Playback error: ${detail}`)
+      const recoveryTrack = currentTrackRef.current
+      if (recoveryTrack.uri && spotifyRecoveryRetryRef.current < 1) {
+        spotifyRecoveryTrackRef.current = recoveryTrack
+        setSpotifyReady(false)
+        player.disconnect()
+      }
+    })
     player.addListener('player_state_changed', (state: SpotifyPlaybackState | null) => {
       if (!state) return
       setPlaying(!state.paused)
@@ -116,7 +158,14 @@ function App() {
     })
     setSpotifyPlayer(player)
     void player.connect().then(connected => { if (!connected) setSpotifyError('Не удалось подключить Web Playback SDK') })
-    return () => { player.disconnect(); setSpotifyPlayer(null); setSpotifyReady(false); spotifyDeviceIdRef.current = '' }
+    return () => {
+      if (spotifyReconnectTimerRef.current !== null) window.clearTimeout(spotifyReconnectTimerRef.current)
+      spotifyReconnectTimerRef.current = null
+      player.disconnect()
+      setSpotifyPlayer(null)
+      setSpotifyReady(false)
+      spotifyDeviceIdRef.current = ''
+    }
   }, [spotifyConnected, spotifySdkReady])
   useEffect(() => { if (spotifyPlayer && spotifyReady) void spotifyPlayer.setVolume(volume / 100) }, [spotifyPlayer, spotifyReady, volume])
   const pickPlatform = (platform: Platform) => { setChosen(platform); if (remember) { localStorage.setItem('blink-platform', platform); setShowPicker(false) } }
@@ -165,7 +214,11 @@ function App() {
     }
     throw new Error('Spotify не подтвердил начало воспроизведения. Проверьте активный Premium-сеанс и разрешение streaming.')
   }
-  const startSpotifyTrack = async (track: Track) => {
+  const startSpotifyTrack = async (track: Track, recovering = false) => {
+    if (!recovering) {
+      spotifyRecoveryRetryRef.current = 0
+      spotifyRecoveryTrackRef.current = null
+    }
     if (!spotifyPlayer || !spotifyReady || !spotifyDeviceIdRef.current) { setSpotifyError('Spotify-плеер Blink ещё не готов. Перезапустите Blink и дождитесь подключения устройства.'); return }
     try {
       await spotifyPlayer.activateElement()
