@@ -373,3 +373,107 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Theme-owned controls override the legacy base palette. */
+.app.theme-black,
+.app.theme-forest,
+.app.theme-ocean,
+.app.theme-burgundy,
+.app.theme-purple {
+  --theme-text: #f8fffb;
+  --theme-text-soft: #e0eee5;
+  --theme-muted: #c3d8cb;
+  --theme-accent: #bff0d0;
+  --theme-control: #355045;
+}
+
+.app.theme-black .welcome-row h1 > span,
+.app.theme-forest .welcome-row h1 > span,
+.app.theme-ocean .welcome-row h1 > span,
+.app.theme-burgundy .welcome-row h1 > span,
+.app.theme-purple .welcome-row h1 > span,
+.app.theme-black .brand-period,
+.app.theme-forest .brand-period,
+.app.theme-ocean .brand-period,
+.app.theme-burgundy .brand-period,
+.app.theme-purple .brand-period {
+  color: var(--theme-accent) !important;
+}
+
+.app.theme-black .date-label,
+.app.theme-forest .date-label,
+.app.theme-ocean .date-label,
+.app.theme-burgundy .date-label,
+.app.theme-purple .date-label,
+.app.theme-black .hero-play,
+.app.theme-forest .hero-play,
+.app.theme-ocean .hero-play,
+.app.theme-burgundy .hero-play,
+.app.theme-purple .hero-play,
+.app.theme-black .outline-button,
+.app.theme-forest .outline-button,
+.app.theme-ocean .outline-button,
+.app.theme-burgundy .outline-button,
+.app.theme-purple .outline-button {
+  color: var(--theme-text) !important;
+  background: var(--theme-control) !important;
+  border-color: var(--theme-accent) !important;
+}
+
+.app.theme-black .hero-play,
+.app.theme-forest .hero-play,
+.app.theme-ocean .hero-play,
+.app.theme-burgundy .hero-play,
+.app.theme-purple .hero-play {
+  border: 1px solid var(--theme-accent) !important;
+}
+
+.app.theme-black .control-buttons button,
+.app.theme-forest .control-buttons button,
+.app.theme-ocean .control-buttons button,
+.app.theme-burgundy .control-buttons button,
+.app.theme-purple .control-buttons button,
+.app.theme-black .player-volume,
+.app.theme-forest .player-volume,
+.app.theme-ocean .player-volume,
+.app.theme-burgundy .player-volume,
+.app.theme-purple .player-volume,
+.app.theme-black .timeline,
+.app.theme-forest .timeline,
+.app.theme-ocean .timeline,
+.app.theme-burgundy .timeline,
+.app.theme-purple .timeline {
+  color: var(--theme-text) !important;
+}
+
+.app.theme-black .control-buttons .main-play,
+.app.theme-forest .control-buttons .main-play,
+.app.theme-ocean .control-buttons .main-play,
+.app.theme-burgundy .control-buttons .main-play,
+.app.theme-purple .control-buttons .main-play {
+  background: var(--theme-accent) !important;
+  color: var(--theme-bg) !important;
+}
+
+.app.theme-black .seek-slider,
+.app.theme-forest .seek-slider,
+.app.theme-ocean .seek-slider,
+.app.theme-burgundy .seek-slider,
+.app.theme-purple .seek-slider {
+  accent-color: var(--theme-accent) !important;
+}
+
+.app.theme-black .connect-button,
+.app.theme-forest .connect-button,
+.app.theme-ocean .connect-button,
+.app.theme-burgundy .connect-button,
+.app.theme-purple .connect-button,
+.app.theme-black .source-active,
+.app.theme-forest .source-active,
+.app.theme-ocean .source-active,
+.app.theme-burgundy .source-active,
+.app.theme-purple .source-active {
+  background: var(--theme-surface) !important;
+  color: var(--theme-text) !important;
+  border-color: var(--theme-border) !important;
+}
