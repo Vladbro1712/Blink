@@ -165,3 +165,79 @@
     grid-template-columns: 1fr;
   }
 }
+
+.theme-black .favorite-banner,
+.theme-forest .favorite-banner,
+.theme-ocean .favorite-banner,
+.theme-burgundy .favorite-banner,
+.theme-purple .favorite-banner {
+  color: var(--text);
+}
+
+.theme-black .favorite-banner strong,
+.theme-forest .favorite-banner strong,
+.theme-ocean .favorite-banner strong,
+.theme-burgundy .favorite-banner strong,
+.theme-purple .favorite-banner strong {
+  color: var(--text);
+}
+
+.theme-black .favorite-banner span,
+.theme-forest .favorite-banner span,
+.theme-ocean .favorite-banner span,
+.theme-burgundy .favorite-banner span,
+.theme-purple .favorite-banner span {
+  color: var(--muted);
+}
+
+.theme-black .source-modal,
+.theme-forest .source-modal,
+.theme-ocean .source-modal,
+.theme-burgundy .source-modal,
+.theme-purple .source-modal {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.theme-black .platform-option,
+.theme-forest .platform-option,
+.theme-ocean .platform-option,
+.theme-burgundy .platform-option,
+.theme-purple .platform-option {
+  background: var(--surface-soft);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.theme-black .platform-option.selected,
+.theme-forest .platform-option.selected,
+.theme-ocean .platform-option.selected,
+.theme-burgundy .platform-option.selected,
+.theme-purple .platform-option.selected {
+  background: var(--surface-strong);
+  border-color: var(--accent);
+}
+
+.theme-black .platform-name span,
+.theme-forest .platform-name span,
+.theme-ocean .platform-name span,
+.theme-burgundy .platform-name span,
+.theme-purple .platform-name span,
+.theme-black .status-soon,
+.theme-forest .status-soon,
+.theme-ocean .status-soon,
+.theme-burgundy .status-soon,
+.theme-purple .status-soon,
+.theme-black .modal-description,
+.theme-forest .modal-description,
+.theme-ocean .modal-description,
+.theme-burgundy .modal-description,
+.theme-purple .modal-description,
+.theme-black .modal-note,
+.theme-forest .modal-note,
+.theme-ocean .modal-note,
+.theme-burgundy .modal-note,
+.theme-purple .modal-note {
+  color: var(--muted);
+}
