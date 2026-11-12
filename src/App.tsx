@@ -292,7 +292,7 @@ function App() {
         code_challenge_method: 'S256',
         code_challenge: codeChallenge,
         state,
-        scope: 'user-read-private user-read-email user-read-currently-playing user-read-playback-state user-modify-playback-state streaming user-library-read',
+        scope: 'user-read-private user-read-email user-read-currently-playing user-read-playback-state user-modify-playback-state streaming user-library-read user-library-modify',
       }).toString()
       await spotifyBridge.authenticate({ authUrl: authUrl.toString(), codeVerifier, state })
       setSpotifyConnected(true)
