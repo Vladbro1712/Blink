@@ -12,6 +12,7 @@ type SpotifyPlayer = {
   disconnect: () => void
   getCurrentState?: () => Promise<SpotifyPlaybackState | null>
   activateElement: () => Promise<void>
+  resume: () => Promise<void>
   togglePlay: () => Promise<void>
   seek: (positionMs: number) => Promise<void>
   setVolume: (volume: number) => Promise<void>
@@ -144,8 +145,8 @@ function App() {
       const recoveryTrack = currentTrackRef.current
       if (recoveryTrack.uri && spotifyRecoveryRetryRef.current < 1) {
         spotifyRecoveryTrackRef.current = recoveryTrack
-        setSpotifyReady(false)
-        player.disconnect()
+        spotifyRecoveryRetryRef.current += 1
+        window.setTimeout(() => { void player.resume().catch(() => undefined) }, 750)
       }
     })
     player.addListener('player_state_changed', (state: SpotifyPlaybackState | null) => {
